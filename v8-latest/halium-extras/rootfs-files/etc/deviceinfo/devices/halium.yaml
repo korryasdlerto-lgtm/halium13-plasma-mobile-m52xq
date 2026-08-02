@@ -1,0 +1,34 @@
+m52xq:
+  OfonoPlugin: binder
+  GridUnit: 37
+  # 2026-07-16: repowerd's own dmesg-visible "No device yaml config
+  # found!" message (seen from sensorfwd, same underlying deviceinfo
+  # lookup) plus the flashlight toggle and brightness slider both
+  # silently doing nothing pointed at a missing device-specific
+  # deviceinfo config -- this file existed but never declared these
+  # paths, so ayatana-indicator-power/repowerd had no idea which
+  # sysfs nodes to use and never even attempted the write.
+  #
+  # UPDATE 2026-07-16 (later same day): torch_0/switch_0 (the generic
+  # AOSP LED-class nodes bound to the leds-qti-flash driver) turned
+  # out to be a dead end -- writes were accepted (rc=0) but produced
+  # zero dmesg output and zero physical light, because the flash LED
+  # on this SoC is actually driven by a SEPARATE PMIC/charger chip,
+  # the sm5714-fled driver (charger IC with integrated flash-LED
+  # boost converter), which coordinates with the muic/USB-PD/OTG
+  # boost-mode state machine before enabling the LED -- that
+  # coordination never happens if you only poke the generic
+  # led:torch_0/switch_0 nodes.
+  #
+  # The correct interface is the Samsung camera-HAL sysfs node
+  # /sys/devices/virtual/camera/flash/rear_flash, confirmed by the
+  # SamsungS20UbuntuTouch reference port (x1s.yaml) using the exact
+  # same single-path pattern, and confirmed live here: writing "100"
+  # produces a real dmesg trail (sm5714_store -> fled_torch_enable(1)
+  # -> sm5714_fled_control: Torch mode) and real physical light;
+  # writing "0" turns it off. This is a single magic-value node, not
+  # a brightness path -- no separate switch path exists or is needed.
+  BacklightSysfsPath:
+    - /sys/class/backlight/panel0-backlight
+  FlashlightSysfsPath:
+    - /sys/devices/virtual/camera/flash/rear_flash

@@ -1,0 +1,77 @@
+#!/bin/sh -e
+exec >>/android/data/lxc-android-ready.log 2>&1
+echo "=== lxc-android-ready start ==="
+
+# Workaround https://github.com/lxc/lxc/issues/3570
+# If lxc-wait fails with "Failed to receive state from monitor", re-try
+# up-to 10 times, 0.5 seconds apart.
+
+RETRY=10
+while ! err=$(lxc-wait -n android -s RUNNING -t 120 2>&1); do
+    echo "$err" >&2
+    if ! echo "$err"|grep -q 'Invalid argument - Failed to receive state from monitor'; then
+        exit 1
+    fi
+
+    RETRY=$(( RETRY - 1 ))
+
+    if [ $RETRY -le 0 ]; then
+        echo "LXC container doesn't become running in time, exitting..." >&2
+        exit 1
+    fi
+
+    echo "Workaround https://github.com/lxc/lxc/issues/3570, re-try up to ${RETRY} more time(s)." >&2
+    sleep 0.5
+done
+
+containerpid="$(lxc-info -n android -p -H)"
+if [ -n "$containerpid" ]; then
+    while true; do
+        [ -f /proc/$containerpid/root/dev/.coldboot_done ] && break
+        sleep 0.1
+    done
+
+    if [ "$(systemctl get-default)" = "charger.target" ]; then
+        # remount ro in case we get sudden power cut
+        echo u > /proc/sysrq-trigger
+
+        # When Android container boots as a charger, the property srevice might
+        # not be brought up. Not that it's important in this mode anyway, so don't
+        # bother waiting.
+        exit 0
+    fi
+
+    # If the socket isn't available, 'getprop' falls back to reading files
+    # manually, causing a false positive of propertyservice being up
+    while [ ! -e "/proc/$containerpid/root/dev/socket/property_service" ]; do sleep 0.1; done
+
+    # FOUND 2026-07-21: the host-side /usr/bin/getprop (package
+    # libhybris-utils, a hand-written non-bionic reimplementation of the
+    # Android property protocol client for talking to a container's
+    # property_service from outside it) sends a command value the real
+    # Android 13 init (this device) doesn't recognise as either
+    # PROP_MSG_SETPROP or PROP_MSG_SETPROP2 -- confirmed live: every call
+    # produced "init: sys_prop: invalid command 2" in dmesg, and this
+    # while loop never exited (getprop always returned empty), spinning
+    # at the sleep 0.1 cadence forever and leaving this whole control
+    # process (and the systemd unit depending on it) permanently stuck
+    # in "activating". lxc-attach -n android -- getprop, which runs the
+    # REAL Android getprop binary from inside the container's own mount/
+    # pid namespace instead of this host-side reimplementation, was
+    # confirmed working live (returned "33" for this exact property).
+    # Use that instead.
+    #
+    # This property is read by libhybris itself to pick a linker, so it
+    # *MUST* be available before we emit 'android'.
+    while [ -z "$(lxc-attach -n android -- getprop ro.build.version.sdk 2>/dev/null)" ]; do sleep 0.1; done
+
+    # Allow custom properties before announcing that the boot is completed
+    if [ -f /custom/custom.prop ]; then
+        while [ ! -e "/proc/$containerpid/root/dev/socket/property_service" ]; do sleep 0.1; done
+        grep "^custom\." /custom/custom.prop | sed 's/=/ /' | while read property value; do
+            lxc-attach -n android -- setprop $property $value
+        done
+    fi
+else
+    exit 1
+fi

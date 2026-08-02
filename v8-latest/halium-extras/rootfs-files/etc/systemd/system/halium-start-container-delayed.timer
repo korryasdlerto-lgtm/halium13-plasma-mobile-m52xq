@@ -1,0 +1,9 @@
+[Unit]
+Description=Trigger halium-start-container-delayed.service shortly after boot (timer, not passive .wants -- more reliable, matches halium-phosh-watchdog.timer's already-proven pattern)
+
+[Timer]
+OnBootSec=15s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

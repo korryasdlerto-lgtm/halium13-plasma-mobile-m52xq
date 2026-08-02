@@ -1,0 +1,16 @@
+[Unit]
+Description=Force one extra lxc-android-config restart at a fixed early-boot uptime to dodge a native linker-namespace race
+# Only depend on /userdata being mounted (needed for the script itself and
+# for systemctl to be usable) -- deliberately NOT ordered after
+# halium-kickstart-lxc.service, so this fires at a fixed uptime on its own
+# schedule instead of waiting for kickstart's own (possibly very long)
+# internal retry loop to finish first.
+After=mount-halium-overlay.service mount-android-partitions.service
+Requires=mount-halium-overlay.service mount-android-partitions.service
+
+[Service]
+Type=oneshot
+ExecStart=/userdata/halium-lxc-uptime-restart.sh
+
+[Install]
+WantedBy=multi-user.target

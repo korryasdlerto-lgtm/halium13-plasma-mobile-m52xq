@@ -1,0 +1,12 @@
+[Unit]
+Description=Bind-mount HIDL-compat audio HAL shim over the broken vendor audio.primary passthrough stub
+After=lxc-android-config.service
+Before=pulseaudio.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/halium-fix-audio-hal.sh
+
+[Install]
+WantedBy=multi-user.target

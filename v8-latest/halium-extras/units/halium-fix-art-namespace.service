@@ -1,0 +1,10 @@
+[Unit]
+Description=Persistently patch linkerconfig ART namespace visibility
+After=lxc-android-config.service
+
+[Service]
+Type=simple
+ExecStart=/bin/sh /userdata/fix-linkerconfig-art-namespace.sh
+
+[Install]
+WantedBy=multi-user.target

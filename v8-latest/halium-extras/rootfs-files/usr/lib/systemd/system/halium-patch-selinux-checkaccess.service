@@ -1,0 +1,14 @@
+[Unit]
+Description=Patch libselinux.so selinux_check_access() to unconditional allow (userspace-only, unblocks wait_for_coldboot_done)
+DefaultDependencies=no
+Requires=mount-android-partitions.service
+After=mount-android-partitions.service
+Before=lxc-android-config.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/halium-patch-selinux-checkaccess.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

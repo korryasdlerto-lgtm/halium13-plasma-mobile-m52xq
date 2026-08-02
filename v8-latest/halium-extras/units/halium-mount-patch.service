@@ -1,0 +1,13 @@
+[Unit]
+Description=Bind-mount patched Android mount.sh
+DefaultDependencies=no
+Before=lxc-android-config.service
+After=userdata.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/mount --bind /userdata/mount-patched-v3.sh /var/lib/lxc/android/mount.sh
+
+[Install]
+WantedBy=multi-user.target
