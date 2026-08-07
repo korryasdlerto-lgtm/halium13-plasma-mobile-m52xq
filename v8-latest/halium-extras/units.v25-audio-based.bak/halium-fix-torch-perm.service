@@ -1,0 +1,12 @@
+[Unit]
+Description=Fix led:torch_0 permissions for phablet (flashlight toggle)
+After=lxc-android-config.service
+Requires=lxc-android-config.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/halium-fix-torch-perm.sh
+
+[Install]
+WantedBy=multi-user.target

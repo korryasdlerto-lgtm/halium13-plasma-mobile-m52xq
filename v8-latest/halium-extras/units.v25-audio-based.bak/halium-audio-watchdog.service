@@ -1,0 +1,7 @@
+[Unit]
+Description=Re-check audio.primary.default.so HIDL-compat bind-mount is still in place
+After=lxc-android-config.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/halium-audio-watchdog.sh

@@ -1,0 +1,11 @@
+[Unit]
+Description=Move broken gst-hybris video plugins out of GStreamer's scan path (prevents media-hub/camera viewfinder hang)
+Before=media-hub.service lightdm.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/halium-fix-gst-hybris.sh
+
+[Install]
+WantedBy=multi-user.target

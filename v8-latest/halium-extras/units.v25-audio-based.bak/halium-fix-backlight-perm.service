@@ -1,0 +1,12 @@
+[Unit]
+Description=Fix panel0-backlight brightness permissions for phablet (brightness slider)
+After=lxc-android-config.service
+Requires=lxc-android-config.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/halium-fix-backlight-perm.sh
+
+[Install]
+WantedBy=multi-user.target

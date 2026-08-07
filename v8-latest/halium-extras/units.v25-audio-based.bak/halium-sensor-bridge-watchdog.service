@@ -1,0 +1,14 @@
+[Unit]
+Description=Keep halium_sensor_bridge (AIDL sensors bridge) alive and unstuck
+After=lxc-android-config.service halium-install-sensor-bridge.service
+Requires=lxc-android-config.service
+Wants=halium-install-sensor-bridge.service
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/halium-sensor-bridge-watchdog.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

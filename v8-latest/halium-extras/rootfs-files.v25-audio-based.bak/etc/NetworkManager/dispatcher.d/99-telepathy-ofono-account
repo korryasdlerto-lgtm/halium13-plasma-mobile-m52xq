@@ -1,0 +1,67 @@
+#!/bin/sh
+# NetworkManager dispatcher script: creates the ofono telepathy-ofono
+# telepathy account the first time NetworkManager reaches "connected"
+# state on any interface (WiFi or mobile). Needed because on this port
+# the mission-control ofono account-manager plugin
+# (mcp-account-manager-ofono.so) never creates the account itself
+# (its usual trigger, the OOBE/setup-wizard first-run step, never runs
+# on this device) -- see fix docs, "Ручное создание telepathy-аккаунта".
+# mission-control also has a built-in GNetworkMonitor gate that refuses
+# to dispatch ANY telepathy account (including voice/USSD, which needs
+# no IP connectivity at all) until NetworkManager reports "online" --
+# so this also needs to fire only once real connectivity exists, not at
+# boot before any interface is up.
+#
+# Runs as root (systemd NetworkManager-dispatcher.service), so talks to
+# the phablet user's session bus explicitly.
+
+IFACE="$1"
+STATUS="$2"
+
+[ "$STATUS" = "up" ] || exit 0
+
+# The GSM "Internet" connection is (re)created dynamically by the ofono
+# NetworkManager plugin with an explicit autoconnect=true, which wins over
+# any [connection-*] default-policy match in NetworkManager.conf -- so
+# re-assert it here, unconditionally, on every dispatcher run (idempotent,
+# cheap). See NetworkManager.conf comment for why this matters.
+nmcli connection modify Internet connection.autoconnect no 2>/dev/null
+
+PHABLET_UID=$(id -u phablet 2>/dev/null) || exit 0
+export XDG_RUNTIME_DIR="/run/user/$PHABLET_UID"
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+
+MC_TOOL="runuser -u phablet -- env XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS mc-tool"
+
+# Idempotent: skip entirely if the account already exists.
+if $MC_TOOL list 2>/dev/null | grep -q '^ofono/ofono/account0'; then
+    exit 0
+fi
+
+logger -t telepathy-ofono-account "creating ofono telepathy account (triggered by $IFACE up)"
+
+$MC_TOOL add ofono/ofono account0 string:modem-objpath=/ril_0
+$MC_TOOL enable ofono/ofono/account0
+$MC_TOOL auto-connect ofono/ofono/account0
+$MC_TOOL display ofono/ofono/account0 'SIM 1'
+
+# Give mission-control a moment to actually dispatch the new account
+# before restarting the telephony-service units below -- otherwise
+# telephony-service-handler's USSDManager can race the not-yet-connected
+# account and permanently log "Failed to connect signals" until its next
+# restart (see fix docs).
+sleep 5
+
+# telephony-service-approver/indicator are systemd --USER units, not
+# system units -- a plain `systemctl restart` here (root/system scope)
+# silently finds nothing and does nothing (BUG FOUND AND FIXED
+# 2026-07-15: this previously meant the USSDManager-race workaround
+# below never actually ran via automation, only when done by hand).
+runuser -u phablet -- env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" \
+    systemctl --user restart telephony-service-approver.service telephony-service-indicator.service 2>/dev/null
+runuser -u phablet -- env XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" \
+    gdbus call --session --dest com.lomiri.TelephonyServiceHandler \
+    --object-path /com/lomiri/TelephonyServiceHandler \
+    --method org.freedesktop.DBus.Peer.Ping 2>/dev/null
+
+logger -t telepathy-ofono-account "done"

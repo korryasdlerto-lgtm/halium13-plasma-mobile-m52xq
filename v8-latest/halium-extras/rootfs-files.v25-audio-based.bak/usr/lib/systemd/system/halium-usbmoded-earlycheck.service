@@ -1,0 +1,12 @@
+[Unit]
+Description=Snapshot live usb-moded systemd state to /userdata (bypasses unreliable /var/log persistence)
+DefaultDependencies=no
+After=usb-moded.service local-fs.target
+Conflicts=shutdown.target
+
+[Service]
+Type=simple
+ExecStart=/bin/sh /usr/libexec/halium-usbmoded-earlycheck.sh
+
+[Install]
+WantedBy=basic.target

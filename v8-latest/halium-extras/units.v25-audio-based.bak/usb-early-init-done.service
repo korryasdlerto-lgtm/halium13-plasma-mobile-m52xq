@@ -1,0 +1,12 @@
+[Unit]
+Description=Signal usb-moded init-done early (enable developer mode / RNDIS without waiting for graphical.target)
+After=usb-moded.service
+Requires=usb-moded.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/usb-moded/turn-usb-rescue-mode-off
+
+[Install]
+WantedBy=multi-user.target

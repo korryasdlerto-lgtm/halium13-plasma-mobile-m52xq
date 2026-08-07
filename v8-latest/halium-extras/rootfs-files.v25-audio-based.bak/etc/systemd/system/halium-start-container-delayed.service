@@ -1,0 +1,47 @@
+[Unit]
+Description=Start the Android LXC container after the rest of boot (so it never blocks SSH/multi-user.target), wait for real readiness, then bring phosh up
+# НАЙДЕНО 2026-07-24/25: несколько подходов к автозапуску
+# lxc-android-config.service перепробованы живьём:
+#   1. multi-user.target.wants symlink -- пассивный .wants pull-in
+#      подтверждённо НЕ работает надёжно (ConditionResult оставался "no"
+#      500+ секунд, job вообще не создавался).
+#   2. sysinit.target.wants -- сработало (контейнер стартовал), но
+#      заставляет ВЕСЬ sysinit.target (а через него сеть/dbus/SSH)
+#      ждать тяжёлого юнита -- SSH не поднялся вообще на живом тесте.
+#   3. Маска навсегда -- SSH гарантированно работает, но контейнер
+#      никогда не стартует сам, только руками -- не автоматизация.
+#   4. Явный `systemctl start` (не .wants) после multi-user.target --
+#      SSH не ломает, но phosh.service успевает попытаться стартовать
+#      РАНЬШЕ, чем Android-init внутри контейнера реально готов
+#      (systemd-юнит "active" != Android внутри загрузился) -- зависает
+#      на ExecStartPre (halium-bounce-composer.sh) НАВСЕГДА, подтверждено
+#      живым тестом на чистой прошивке v19.
+# Этот вариант (5-й) -- та же явная команда, но обёрнутая в скрипт,
+# который ЖДЁТ реальной готовности (init.svc.zygote=running внутри
+# контейнера, до 60с) и ТОЛЬКО ПОТОМ явно перезапускает phosh.service --
+# повторяет ровно ту ручную SSH-последовательность, которая уже
+# многократно подтверждена рабочей.
+#
+# НАЙДЕНО 2026-07-25 (продолжение): After=multi-user.target было ОШИБКОЙ --
+# rild.service/ofono.service/bluebinder.service сами являются частью
+# multi-user.target и сами ЖДУТ Android-контейнер (rild/HAL модема,
+# bluebinder/HAL bluetooth) -- получается замкнутый круг: multi-user.target
+# не может завершиться, пока rild/ofono не отработают, а они не отработают,
+# пока контейнер не запущен, а контейнер запускает ЭТОТ юнит, который сам
+# ждёт multi-user.target. Подтверждено живьём: контейнер завис на 4+ минуты
+# именно из-за этого, хотя SSH (через usb-moded-ssh.service, НЕ через
+# multi-user.target) поднимался мгновенно и без проблем. Убрано
+# After=multi-user.target -- юнит теперь стартует сразу после
+# usb-moded-ssh.service (что уже подтверждено безопасным для SSH), не
+# дожидаясь остального multi-user.target вообще.
+After=usb-moded-ssh.service
+Wants=usb-moded-ssh.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/halium-start-container-delayed.sh
+RemainAfterExit=yes
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target

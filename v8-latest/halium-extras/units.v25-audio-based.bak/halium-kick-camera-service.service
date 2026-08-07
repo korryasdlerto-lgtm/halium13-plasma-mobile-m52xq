@@ -1,0 +1,12 @@
+[Unit]
+Description=Continuously watch lxc-android-config.service and (re-)kick vendor.camera-provider-2-6 on every activation
+After=lxc-android-config.service
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/halium-watch-camera.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Start adbd inside the Android container (TCP/vsock only, no USB gadget changes)
+After=lxc-android-config.service
+Requires=lxc-android-config.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh /userdata/halium-start-adbd.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Load btpower kernel module (BT_EN GPIO power sequencing for wcn6750 BT chip) before bluebinder starts
+After=lxc-android-config.service
+Before=bluebinder.service bluetooth-touch.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/halium-load-bt-power.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Fallback chmod for /dev/binder* device nodes before phosh starts
+DefaultDependencies=no
+After=systemd-udevd.service
+Before=phosh.service basic.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/halium-binder-chmod.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=basic.target

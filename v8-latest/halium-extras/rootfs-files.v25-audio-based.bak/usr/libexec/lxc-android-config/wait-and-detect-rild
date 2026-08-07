@@ -1,0 +1,52 @@
+#!/bin/sh -e
+export HYBRIS_LD_LIBRARY_PATH=/opt/halium-lxc-bridge/system-lib64:/opt/halium-lxc-bridge/vendor-lib64
+
+env_path=/run/ril_ofono_env
+
+# RIL for Android 8.0+ uses a completely different system not based on UNIX socket,
+# so we won't wait for them here. Also Sailfish's oFono uses a completely different
+# configuration system, so don't try to detect dual-sim here.
+sdk_version=$(getprop ro.build.version.sdk)
+if [ "$sdk_version" -ge 26 ]; then
+    touch $env_path
+    exit 0;
+fi
+
+timeout=800
+# loop and then exit, if rild isnt up after 80 sec
+# it is likely not starting at all (or not there)
+while [ ! -e /dev/socket/rild ]; do
+    sleep 0.1
+    if [ "$timeout" -le 0 ]; then
+        exit 1
+    fi
+    timeout=$((timeout - 1))
+done
+
+RIL_DEVICE="$(getprop ril.device ril)"
+RIL_NUM_SIM_SLOTS="$(getprop ril.num_slots)"
+
+if [ -z "$RIL_NUM_SIM_SLOTS" ]; then
+    # https://android.googlesource.com/platform/frameworks/base.git/+/android-7.1.2_r1/telephony/java/android/telephony/TelephonyManager.java
+    case "$(getprop persist.radio.multisim.config)" in
+        dsds|dsda) RIL_NUM_SIM_SLOTS=2 ;;
+        tsts) RIL_NUM_SIM_SLOTS=3 ;;
+        *) RIL_NUM_SIM_SLOTS=1 ;;
+    esac
+fi
+
+FLEXMAP_TYPE="$(getprop persist.radio.flexmap_type)"
+case "$FLEXMAP_TYPE" in
+    none)
+        RIL_LEGACY_CAP_SWITCH=1 ;;
+    *)
+        # FIXME: what about other values? I've seen "dds" (uses modern cap
+        # switch) and "nw_mode" (no idea what is it for).
+        RIL_LEGACY_CAP_SWITCH=0 ;;
+esac
+
+cat >$env_path <<EOF
+OFONO_RIL_DEVICE=$RIL_DEVICE
+OFONO_RIL_NUM_SIM_SLOTS=$RIL_NUM_SIM_SLOTS
+OFONO_RIL_LEGACY_CAP_SWITCH=$RIL_LEGACY_CAP_SWITCH
+EOF
