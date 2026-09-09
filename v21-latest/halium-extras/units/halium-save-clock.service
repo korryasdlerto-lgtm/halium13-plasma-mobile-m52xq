@@ -1,0 +1,13 @@
+[Unit]
+Description=Save system clock to persistent file on shutdown (fake-hwclock replacement, RTC write is blocked on this device)
+DefaultDependencies=no
+Before=shutdown.target reboot.target halt.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+ExecStop=/bin/sh -c 'date -u +%%s > /userdata/saved-clock.txt'
+
+[Install]
+WantedBy=multi-user.target

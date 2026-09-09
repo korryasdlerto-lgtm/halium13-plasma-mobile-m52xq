@@ -1,8 +1,0 @@
-# Despite the name, this is applicable to both Android USB and configfs devices
-[android]
-iManufacturer = $MANUFACTURER
-iProduct = $PRODUCT
-idVendor = $IDVENDOR
-
-[configfs]
-function_rndis = $RNDIS_FUNCTION

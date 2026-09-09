@@ -1,0 +1,21 @@
+[Unit]
+Description=Force usb-moded into developer_mode (rndis+ssh) since uid 0 can't be the default mode, and keep re-enforcing it for the rest of boot
+After=usb-moded.service
+Requires=usb-moded.service
+
+[Service]
+# CHANGED 2026-07-21: was Type=oneshot -- did the initial D-Bus/IP/UDC
+# setup once and exited, so nothing was left running to notice or fix
+# usb_moded's rescue-mode cycle re-triggering, the UDC power state
+# flapping, or usb-moded-ssh.service crashing later in boot. The script
+# itself now ends in an internal supervisor loop (~1 hour at 3s/iteration)
+# instead of exiting after the one-shot setup -- Type=simple plus
+# Restart=always is a safety net in case the script itself dies for an
+# unrelated reason, not the primary mechanism.
+Type=simple
+ExecStart=/bin/sh /usr/libexec/halium-force-usb-developer-mode.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=basic.target

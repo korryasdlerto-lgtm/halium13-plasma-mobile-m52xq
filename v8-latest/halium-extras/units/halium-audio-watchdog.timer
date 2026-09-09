@@ -1,9 +1,0 @@
-[Unit]
-Description=Periodically re-check the audio HAL bind-mount
-
-[Timer]
-OnBootSec=2min
-OnUnitActiveSec=3min
-
-[Install]
-WantedBy=timers.target

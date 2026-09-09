@@ -8,11 +8,16 @@ now" approach — as opposed to the from-scratch mainline-kernel effort for
 the same device tracked in a
 [separate repository](https://github.com/korryasdlerto-lgtm/samsung-m52xq-mainline).
 
-**Current status: real, working desktop with hardware GPU acceleration,
-working SSH-over-USB, working Android-HAL container boot (telephony/
-WiFi-service/bluetooth processes all start). Several major subsystems
-remain broken or unfinished — see [Known issues](#known-issues) below,
-this is honestly documented, not a "finished ROM".**
+**Current status (в21): real, working desktop with hardware GPU
+acceleration, working SSH-over-USB, working Android-HAL container boot,
+**working Bluetooth end-to-end** (daemon + real MAC + pairing UI),
+**working password-protected lockscreen**, a **working on-screen
+keyboard** (via `QtVirtualKeyboard`, discovered as a side-effect of an
+unrelated `kwin-wayland` dependency bump), and an automatic
+power-button-triggered screen-wake watchdog for a recurring DPMS bug.
+Several major subsystems remain broken or unfinished — see
+[Known issues](#known-issues) below, this is honestly documented, not a
+"finished ROM".**
 
 ## What this actually is
 
@@ -54,7 +59,7 @@ that can't be redistributed here) — it's the actual authored/patched
 material this port consists of:
 
 ```
-v8-latest/
+v21-latest/
   META-INF/com/google/android/update-binary
                           — the TWRP-flashable installer script. This is
                             the real core of the project: it flashes
@@ -66,7 +71,7 @@ v8-latest/
                             OOM issue), and injects every fix below into
                             the right place inside rootfs.img — a single
                             script accumulated over many iterations
-                            (в1 through v8), each documented in its own
+                            (в1 through в21), each documented in its own
                             inline comments with dates and root-cause
                             explanations, not just "what" but "why".
   halium-extras/
@@ -82,29 +87,92 @@ v8-latest/
                             rootfs-files/
     system-patches/        — small, targeted binary/text patches applied
                             to specific system files at flash time
-  docs/                    — the FIXES-*.md investigation logs written
-                            during development, one per major bug/feature
-                            area, kept as originally written (mix of
-                            Russian and English, chronological, includes
-                            dead ends and things that didn't work — not
+    android-data-files/    — our own patched Android framework jars
+                            (org.lineageos.platform/framework/services)
+                            plus a small native `halium_sensor_bridge`
+                            helper binary we wrote ourselves. The vendor
+                            sensors HAL `.so` and a bundled kernel-modules
+                            tarball are excluded, see PROPRIETARY-FILES.txt
+  firmware/                — boot.img and vendor_boot.img: real binaries,
+                            included for real (these are the halium-
+                            patched images this project builds/repacks
+                            itself, not raw untouched Samsung signed
+                            images). system.img is a symlink, see
+                            "Repository layout" below.
+  kernel-config/
+    lineage-m52xq_defconfig — the vendor kernel's defconfig, for
+                            reference/comparison (this project uses the
+                            stock vendor kernel as-is, doesn't rebuild it,
+                            but this file is useful for diffing against
+                            sibling ports on the same device)
+  FIXES-*.md, DROIDIAN-V23-PLAN.md, PLAN-NEXT-STEPS.md
+                          — investigation logs written during
+                            development, one per major bug/feature area,
+                            kept as originally written (mix of Russian
+                            and English, chronological, includes dead
+                            ends and things that didn't work — not
                             cleaned up into a polished changelog on
                             purpose, since the reasoning and rejected
                             alternatives are often more useful than the
                             final answer alone)
 ```
 
-**Deliberately excluded** from this repository (present in the actual
-flashable ZIP but not here): the `lxc-bridge-libs/` bridge library set
-(~540 MB of libhybris/Android bridge `.so` files extracted from the
-device's own `/vendor` and `/system` partitions — device-specific, and
-redistributing extracted vendor binaries isn't appropriate for a public
-repo), `android-data-files/` (~140 MB of extracted/patched Android
-framework `.jar`/`.apk` files, same concern), the full `rootfs.img` and
-`system.img` themselves, and a handful of large third-party binaries and
-data files that happened to be staged inside `rootfs-files/` for
-injection (a bundled GeoNames city database, `libopencv`/`libwlroots`/
-`liblapack` shared libraries, etc — these are unmodified upstream
-binaries, not this project's own work).
+## Repository layout — proprietary and oversized files
+
+Two different categories of files are **not tracked directly** in this
+repository, for two different reasons — see `PROPRIETARY-FILES.txt` for
+the full manifest and rationale:
+
+1. **Proprietary vendor blobs** (`halium-extras/lxc-bridge-libs/` — the
+   ~540 MB libhybris/Android bridge `.so` library set extracted from the
+   device's own `/vendor` and `/system` partitions, plus a couple of
+   vendor binaries inside `android-data-files/`) are **not present at
+   all** in this repo (not even as placeholders) — we don't have
+   redistribution rights for them.
+2. **Oversized-but-not-proprietary** files (`firmware/system.img`,
+   `data/rootfs-chunks/rootfs.img.part-*`, `data/userdata-overlay.tar.gz`
+   — several gigabytes total) are represented as symlinks pointing at a
+   local, untracked `local-large-files/` directory at the repo root
+   (already in `.gitignore`). The symlinks are committed so the
+   directory structure is documented; the actual files are not.
+
+### Obtaining the excluded files (for building a real flashable ZIP)
+
+If you own this exact device (Samsung Galaxy M52 5G / `m52xq`) and want
+to build an actual flashable ZIP from this source, not just read the
+patch material:
+
+1. **Vendor bridge libraries** (`halium-extras/lxc-bridge-libs/`): pull
+   them from your own device's running Halium container, e.g.:
+   ```sh
+   adb shell su -c 'lxc-attach -n android -- tar -C / -cf - \
+     vendor/lib64 vendor/lib system/lib64/vndk-sp system/lib/vndk-sp' \
+     > lxc-bridge-libs.tar
+   ```
+   then extract into `v21-latest/halium-extras/lxc-bridge-libs/` at the
+   exact relative paths listed in `PROPRIETARY-FILES.txt` (the manifest
+   lists every individual file this project actually uses — you don't
+   need the whole vendor partition, just those specific libraries).
+2. **`firmware/system.img`, `data/rootfs-chunks/*`,
+   `data/userdata-overlay.tar.gz`**: either build these yourself
+   following this project's own build notes (see the `docs/` FIXES logs
+   for the rootfs build process), or — simplest — just place your own
+   copies **next to the cloned repository folder** (i.e. as siblings,
+   `../local-large-files/<name>` relative to where you cloned this repo)
+   and create the `local-large-files/` symlink target inside the repo to
+   point at them:
+   ```sh
+   mkdir -p local-large-files
+   ln -s ../../rootfs.img.part-0 local-large-files/rootfs.img.part-0
+   # ...same for part-1, part-2, system.img, userdata-overlay.tar.gz
+   ```
+   (adjust the `../../` relative path to wherever you actually placed the
+   real files — the symlinks already committed under `v21-latest/data/`
+   and `v21-latest/firmware/system.img` point at `local-large-files/` by
+   a fixed relative path, so as long as `local-large-files/` itself
+   resolves to your real files, everything downstream just works).
+3. `boot.img` and `vendor_boot.img` under `firmware/` are already
+   **real, included** files — no action needed for those.
 
 ## Architecture notes / key findings
 
@@ -123,16 +191,20 @@ trail of each):
   the default linker namespace's local search path finds them without
   needing the cross-namespace redirect that specifically fails for
   non-root UIDs.
-- **Container autostart reliability**: multiple earlier approaches
-  (commenting out an `[Install]` symlink, a `ConditionPathExists`-based
-  gate on this project's own from-scratch `lxc@android.service` template)
-  turned out to be either unreliable or redundant — the container is
-  actually started by a separate, pre-existing, properly-configured
-  `lxc-android-config.service` (inherited from an earlier Droidian-based
-  phase of this project) with its own working `ConditionPathExists` gate,
-  restart-on-failure, and boot-ordering fixes. The from-scratch template
-  unit is effectively dead code that was chased for longer than it should
-  have been before this was discovered.
+- **Container autostart reliability**: the container is started by this
+  project's own `lxc@android.service` template (a systemd instance unit,
+  triggered via `halium-container-autostart.timer`+`.sh` 45-55s into
+  boot, with the delay handled entirely inside the script rather than
+  via unit-level gating). An inherited `halium-watch-camera.sh` watchdog
+  script kept checking a *different*, non-existent unit name
+  (`lxc-android-config.service`, which this project's own `update-binary`
+  explicitly removes in favor of `lxc@android.service`) for its whole
+  lifetime — meaning that watchdog never once fired correctly until this
+  was found and fixed. Also found: `/` sometimes comes back **read-only**
+  after boot (an initrd race, root cause not found), which used to
+  silently break any fix that touches `/etc`/`/usr` if that fix ran
+  before the corresponding `remount,rw` check — resolved by moving the
+  ro-check to the very first thing the autostart script does.
 - **USB gadget mode / SSH-over-USB reliability**: the mode this project
   had been force-selecting via D-Bus (`developer_mode`) turned out to be
   `usb_moded`'s internal **rescue mode** (confirmed via `strings` on the
@@ -158,44 +230,48 @@ trail of each):
 
 ## Known issues
 
-Honestly unresolved as of the last development session:
+Honestly unresolved as of the в21 development session:
 
-- **Homescreen icons are invisible but functional** (draggable,
-  tap-to-launch works) — root-caused (not fixed) to `Kirigami.Icon`'s
-  `status` property getting permanently stuck at `Loading` (never
-  transitioning to `Ready` or `Error`) for every single icon
-  simultaneously, confirmed live via a custom `qInstallMessageHandler()`
-  built into a from-source rebuild of the `plasma-mobile-wf` homescreen
-  applet. No thread is blocked (checked via `/proc/<pid>/task/*/status`
-  and `wchan`), so this points to a logic bug — likely in `libkirigami6`/
-  `libKF6IconThemes`'s async icon-loading code, which is outside this
-  project's own source tree.
-- **No working on-screen keyboard.** wayfire's build only ships the
-  `input-method-v1` Wayland protocol plugin; `maliit` (the framework used
-  by `plasma-mobile-wf`) needs `input-method-v2` to pair with
-  `text-input-v3`, so the two can't talk. `QtVirtualKeyboard` was
-  installed as an alternative, but requires the shell's own QML to embed
-  an `InputPanel` component, which `plasma-mobile-wf`'s compiled shell
-  does not do (it's built around maliit's separate-surface model).
-- **`kscreen` reports zero displays**, despite the actual screen working
-  fine — traced to `KSCREEN_BACKEND=KSC_QScreen.so` being hardcoded in
-  the session startup script, referencing a backend plugin file that
-  does not exist anywhere on the system (only `KSC_Fake.so`,
-  `KSC_KWayland.so`, `KSC_XRandR.so` are actually installed). Not yet
-  fixed.
-- **WiFi never initializes** at the kernel/firmware level (confirmed
-  correct firmware is bind-mounted and MD5-verified, but the WPSS
-  subsystem state stays `OFFLINING`) — attributed to the closed-source
-  `qca_cld3_wlan.ko` vendor kernel module, for which no source is
-  available in this project's kernel tree.
-- Several native (Kirigami/Qt-based) applications reportedly self-close
-  a few seconds after being launched from the homescreen; non-native apps
-  (Firefox, GTK apps) do not have this problem. Root cause not yet
-  identified — a manual SSH-launched reproduction attempt with a copied
-  session environment did not reproduce the crash, suggesting the real
-  launch path differs from a plain interactive shell in some way not yet
-  understood (likely a mount-namespace or environment detail specific to
-  how the shell itself launches child processes).
+- **WiFi never reliably initializes** at the kernel/firmware level
+  (`icnss2: Modules not initialized just return`, repeating forever) —
+  an intermittent WCN-chip firmware/init race, **confirmed identical**
+  in both sibling Droidian and Ubuntu Touch ports of this exact device
+  (same kernel config, same watchdog script already present in all
+  three projects) — sometimes a fresh reboot fixes it, sometimes not, no
+  reliable software fix found in any of the three independent efforts.
+  A safe `unbind`/`bind` of the `icnss2` platform driver (instead of the
+  unsafe `rmmod`/`insmod`) was tried live as a possible per-boot
+  mitigation; it stopped the retry-spam but did not bring the interface
+  up. `CONFIG_MSM_SUBSYSTEM_RESTART` is enabled in the kernel, so a
+  proper SSR-based recovery may exist but wasn't found.
+- **Homescreen icons intermittently invisible or the homescreen
+  layout comes up empty**, for two distinct, now-understood reasons: (1)
+  the homescreen layout config is created fresh by the shell on first
+  login and is genuinely empty right after any flash+`/data` wipe until
+  a second session start, and (2) the icon theme's pixmap cache
+  (`icon-theme.cache`) can go stale relative to the currently-installed
+  app set after any package add/remove, making entries clickable but
+  invisible until `gtk-update-icon-cache -f` regenerates it. Neither fix
+  is yet wired into the automatic boot flow (both still require a manual
+  SSH fix-up), so this remains inconsistent from boot to boot.
+- **Camera provider (`vendor.camera-provider-2-6`) crash-loops** — root
+  cause confirmed to be missing EFS multi-camera calibration data (the
+  EFS partition isn't bridged into this Halium container), the same
+  conclusion independently reached by the sibling Ubuntu Touch project.
+  Not fixable in software; a best-effort retry watchdog exists but only
+  occasionally succeeds.
+- **No Russian (or other non-English) on-screen keyboard layout found**
+  yet — `QtVirtualKeyboard`'s language switcher UI exists
+  (Settings → On-Screen Keyboard → Configure Languages) but wasn't
+  tested through to a working layout switch.
+- Several native (Kirigami/Qt-based) applications (SDL2-based games in
+  particular — `extremetuxracer`, `supertuxkart`) fail to launch from
+  the homescreen with "Failed to open X11 display", since they don't
+  support native Wayland and the launcher only provides
+  `WAYLAND_DISPLAY`, not `DISPLAY` — fixed for these two specifically by
+  patching their `.desktop` files to add `env DISPLAY=:0` (wayfire runs
+  Xwayland), but the same class of bug likely affects other X11-only
+  apps not yet identified.
 
 ## Commands reference
 
@@ -206,10 +282,10 @@ way.
 ### Building the flashable ZIP
 
 ```sh
-cd v8 && zip -9 -r ../halium-m52xq-plasma-mobile.zip . -x ".*"
+cd в21 && zip -9 -r ../halium-m52xq-plasma-mobile.zip . -x ".*"
 ```
 Must run **from inside** the version folder. Running it from outside as
-`zip -9 -r out.zip v8` embeds a `v8/` path prefix on every archive entry,
+`zip -9 -r out.zip в21` embeds a `в21/` path prefix on every archive entry,
 which breaks TWRP's lookup of `META-INF/com/google/android/update-binary`
 at flash time — this exact mistake was made and caught once during
 development. `-9` is max compression (the archive is several GB, worth
@@ -220,7 +296,7 @@ package.
 
 ```sh
 unzip -l halium-m52xq-plasma-mobile.zip | head -15   # check for a flat
-                                                       # structure, no v8/
+                                                       # structure, no в21/
                                                        # prefix
 unzip -l halium-m52xq-plasma-mobile.zip | grep update-binary
 unzip -t halium-m52xq-plasma-mobile.zip | tail -5     # integrity check
@@ -229,7 +305,7 @@ unzip -t halium-m52xq-plasma-mobile.zip | tail -5     # integrity check
 ### Checking for broken symlinks before packaging
 
 ```sh
-find v8 -xtype l
+find в21 -xtype l
 ```
 Run across the **whole** version folder, every time, before building a
 ZIP. A broken symlink fails silently in two different ways once packaged:
@@ -274,7 +350,7 @@ unclean journal.
 ```sh
 sudo lxc-info -n android           # real container state (RUNNING/STOPPED),
                                     # independent of what systemd thinks
-sudo systemctl status lxc-android-config.service
+sudo systemctl status lxc@android.service
 ```
 `lxc-info` is the ground truth; the systemd unit's own reported state can
 lag or disagree with it during restarts, so check both if something looks
@@ -284,16 +360,17 @@ inconsistent.
 
 ```sh
 touch /userdata/CONTAINER_ENABLED
-sudo systemctl start lxc-android-config.service
+sudo systemctl start lxc@android.service
 ```
-The container is gated behind `ConditionPathExists=/userdata/
-CONTAINER_ENABLED` in a drop-in on `lxc-android-config.service` — this
-marker is checked by systemd on *every* start attempt regardless of how
-the unit is triggered (symlink, another unit's dependency, manual
-`systemctl start`), and is intentionally never created automatically on
-first boot, to avoid a startup race that used to cause real problems
-early in the project. The marker persists across normal reboots (only a
-full reflash/wipe clears it), so this is a one-time step per flash.
+The `/userdata/CONTAINER_ENABLED` marker (checked directly inside
+`halium-container-autostart.sh`, not via a unit-level
+`ConditionPathExists=` gate) controls only the *timing*: no marker means
+this is treated as the first boot after a flash and the script sleeps an
+extra 10s (55s total instead of 45s) before starting the container, to
+give the rest of userspace more time to stabilize on the least reliable
+boot. The marker persists across normal reboots (only a full
+reflash/wipe clears it), so the extra delay is a one-time thing per
+flash, not something you need to manage manually.
 
 ### Finding what's actually consuming CPU/heat
 
@@ -309,11 +386,11 @@ have happened during this project's development).
 ## Flashing
 
 The installer is a standard TWRP-flashable ZIP built from the contents of
-a versioned folder (this repository reflects the `v8` staging state, the
+a versioned folder (this repository reflects the `в21` staging state, the
 latest at time of writing) via:
 
 ```sh
-cd v8 && zip -9 -r ../output.zip . -x ".*"
+cd в21 && zip -9 -r ../output.zip . -x ".*"
 ```
 
 (must be run from *inside* the version folder — running it from outside

@@ -1,0 +1,16 @@
+[Unit]
+Description=Wake plasma-mobile-wf session on power key when DPMS is stuck Off
+# Нужен только сам факт наличия /dev/input/event0 -- не зависит от
+# plasma-mobile-wf.service (если бы зависел, то не смог бы среагировать
+# именно в момент, когда та сессия зависла с погасшим экраном).
+After=systemd-udevd.service
+ConditionPathExists=/dev/input/event0
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/libexec/halium-power-wake-watchdog.py
+Restart=always
+RestartSec=3s
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Restore NetworkManager/Bluetooth persistent state before those services start
+DefaultDependencies=no
+Before=NetworkManager.service bluetooth.service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/userdata/halium-restore-state.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

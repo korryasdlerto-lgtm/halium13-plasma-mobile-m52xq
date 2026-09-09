@@ -1,0 +1,12 @@
+[Unit]
+Description=Detect minimedia (droidmedia AudioPolicyService) crash-loop and stop retries to prevent battery drain
+After=lxc-android-config.service
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/halium-audiopolicy-crashloop-watchdog.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

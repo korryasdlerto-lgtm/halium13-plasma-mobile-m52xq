@@ -1,5 +1,0 @@
-# usr/bin/kalk is quite intuitive graphical app
-kalk: no-manual-page [usr/bin/kalk]
-
-# That’s the address from the license text found in GPLv2 / LGPLv2.1…
-kalk: old-fsf-address-in-copyright-file

@@ -1,0 +1,9 @@
+[Unit]
+Description=Qualcomm Remote Filesystem Service
+DefaultDependencies=no
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/rmtfs -v -P
+Restart=always
+RestartSec=1

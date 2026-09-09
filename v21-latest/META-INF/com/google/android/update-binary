@@ -1,0 +1,1234 @@
+#!/sbin/sh
+# Halium 13 / Debian+Plasma (mobile) m52xq — flashable installer (TWRP)
+# Same boot.img/vendor_boot.img/system.img and halium-extras Android bridge
+# as the working Ubuntu Touch v41/v42 build -- only rootfs.img differs
+# (Debian bookworm + Phosh instead of Lomiri), and halium-extras/rootfs-files
+# has had all Lomiri/Mir/Ubuntu-Touch-session-specific files stripped (see
+# DROIDIAN-PHOSH-ROOTFS-HOWTO.md in this project folder for the full list).
+# Flashes boot + vendor_boot, copies rootfs.img and userdata overlay to /data.
+# system.img is NOT handled here — it's a logical partition inside super and
+# must be flashed separately via: fastboot flash system system.img
+
+OUTFD=$2
+ZIP=$3
+
+ui_print() {
+    echo -e "ui_print $1\nui_print" >> /proc/self/fd/$OUTFD
+}
+
+next_step() {
+    # "progress <fraction> <seconds>" ALLOCATES a new segment of the bar
+    # (fraction = share of the whole bar, seconds = expected duration for
+    # TWRP's own time-based auto-animation within that segment). Plain
+    # "set_progress" alone does nothing without an active segment to move
+    # within — must always go through "progress" first.
+    echo -e "progress $1 $2" >> /proc/self/fd/$OUTFD
+}
+
+abort() {
+    ui_print "ERROR: $1"
+    exit 1
+}
+
+ui_print "======================================"
+ui_print " Halium 13 / Debian+Plasma (mobile) — m52xq"
+ui_print " boot + vendor_boot + system + rootfs +"
+ui_print " overlay + Android-bridge fixes (bridge-libs/udev/autostart)"
+ui_print "======================================"
+
+# --- Locate boot / vendor_boot partitions ---
+BOOT_PART=""
+VBOOT_PART=""
+for p in /dev/block/by-name/boot /dev/block/bootdevice/by-name/boot /dev/block/platform/*/by-name/boot; do
+    [ -b "$p" ] && BOOT_PART="$p" && break
+done
+for p in /dev/block/by-name/vendor_boot /dev/block/bootdevice/by-name/vendor_boot /dev/block/platform/*/by-name/vendor_boot; do
+    [ -b "$p" ] && VBOOT_PART="$p" && break
+done
+
+[ -z "$BOOT_PART" ] && abort "boot partition not found (by-name/boot missing)"
+[ -z "$VBOOT_PART" ] && abort "vendor_boot partition not found (by-name/vendor_boot missing)"
+
+ui_print "- boot partition:        $BOOT_PART"
+ui_print "- vendor_boot partition: $VBOOT_PART"
+
+next_step 0.05 2
+ui_print "- Flashing boot.img..."
+unzip -p "$ZIP" firmware/boot.img > "$BOOT_PART" || abort "failed to write boot.img"
+
+next_step 0.05 2
+ui_print "- Flashing vendor_boot.img..."
+unzip -p "$ZIP" firmware/vendor_boot.img > "$VBOOT_PART" || abort "failed to write vendor_boot.img"
+
+# --- Make sure /data is mounted (needed as scratch space for the
+#     sparse->raw system.img conversion below) ---
+if ! grep -q ' /data ' /proc/mounts; then
+    ui_print "- Mounting /data..."
+    mount /data 2>/dev/null
+fi
+grep -q ' /data ' /proc/mounts || abort "/data is not mounted — mount Data in TWRP first, then re-run this zip"
+
+# --- system.img (best-effort: only if this TWRP exposes the dynamic
+#     partition's block device; otherwise it MUST be flashed via real
+#     fastboot(d) from a PC, since that's the only thing that can safely
+#     resize the logical partition inside super). We refuse to write if
+#     the image doesn't fit in the existing slot, to avoid corrupting
+#     neighboring logical partitions (vendor/product) inside super.
+#
+#     IMPORTANT: firmware/system.img in this zip is an ANDROID SPARSE
+#     image (as produced by the AOSP build system), not a raw ext4
+#     filesystem. Writing sparse bytes directly to the block device
+#     produces a garbage filesystem (mount fails with "Invalid argument")
+#     — it must be unsparsed with simg2img first. ---
+SYSTEM_DEV=""
+for p in /dev/mapper/system /dev/block/mapper/system /dev/block/by-name/system /dev/block/bootdevice/by-name/system; do
+    [ -b "$p" ] && SYSTEM_DEV="$p" && break
+done
+
+if [ -n "$SYSTEM_DEV" ]; then
+    if ! command -v simg2img >/dev/null 2>&1; then
+        ui_print "- No simg2img in this TWRP — cannot safely unsparse system.img here."
+        ui_print "  Flash it separately: fastboot flash system system.img"
+    else
+        DEV_SIZE=$(blockdev --getsize64 "$SYSTEM_DEV" 2>/dev/null)
+        ui_print "- Found system device $SYSTEM_DEV (size=$DEV_SIZE)"
+
+        SPARSE_TMP=/data/.system_sparse.tmp
+        RAW_TMP=/data/.system_raw.tmp
+        rm -f "$SPARSE_TMP" "$RAW_TMP"
+
+        next_step 0.15 10
+        ui_print "- Extracting system.img (sparse) to /data for conversion..."
+        if unzip -p "$ZIP" firmware/system.img > "$SPARSE_TMP"; then
+            ui_print "- Unsparsing system.img (simg2img)..."
+            if simg2img "$SPARSE_TMP" "$RAW_TMP"; then
+                RAW_SIZE=$(wc -c < "$RAW_TMP" 2>/dev/null)
+                # Plain shell `[ -le ]` uses signed 32-bit arithmetic in some
+                # TWRP/toybox builds, which misbehaves on sizes above ~2GB
+                # (this system slot is ~4.3GB). Use awk (double-precision,
+                # safe well past 2^53) instead.
+                FITS="no"
+                [ -n "$DEV_SIZE" ] && [ -n "$RAW_SIZE" ] && FITS=$(awk -v a="$RAW_SIZE" -v b="$DEV_SIZE" 'BEGIN{print (a<=b)?"yes":"no"}')
+                if [ "$FITS" = "yes" ]; then
+                    ui_print "- Writing unsparsed system.img ($RAW_SIZE bytes) to $SYSTEM_DEV..."
+                    blockdev --setrw "$SYSTEM_DEV" 2>/dev/null
+                    next_step 0.15 15
+                    if dd if="$RAW_TMP" of="$SYSTEM_DEV" bs=4M 2>/dev/null; then
+                        ui_print "- system.img written OK, no separate fastboot step needed."
+                        SYSTEM_DONE=1
+
+                        # --- Post-flash injection: org.lineageos.platform.jar
+                        #     LongScreen crash-loop fix (2026-07-24) ---
+                        # НАЙДЕНО живо: LongScreen$SettingsObserver.observe()
+                        # crashes system_server with a NullPointerException
+                        # every ~5s ("no such provider" for LineageSettings,
+                        # an APK-based priv-app provider not yet registered
+                        # during SystemServer.installSystemProviders()) --
+                        # confirmed via getprop init.svc.zygote stuck
+                        # respawning and 200%+ CPU on a "main" thread
+                        # (uid 9999, nice -20). We deliberately do NOT modify
+                        # the shared source system.img file itself (used by
+                        # many version folders via symlink) -- instead patch
+                        # the FRESHLY WRITTEN partition here, every flash,
+                        # same pattern as the /data-direct script injections
+                        # below. Patch: LongScreen's constructor now returns
+                        # unconditionally before ever creating the crashing
+                        # SettingsObserver (decompiled with jadx, disassembled/
+                        # reassembled with baksmali+smali 3.0.9, repacked with
+                        # a full `zip -r -X` -- NOT `zip -j` update mode,
+                        # which silently no-ops on this jar's non-standard
+                        # soong_zip structure). odex/vdex must be deleted too
+                        # -- otherwise ART's AOT cache still runs the OLD
+                        # bytecode despite the jar being replaced.
+                        ui_print "- Injecting org.lineageos.platform.jar fix (LongScreen crash-loop)..."
+                        SYS_MNT=/data/.system_patch_mnt
+                        mkdir -p "$SYS_MNT"
+                        if mount -t ext4 "$SYSTEM_DEV" "$SYS_MNT" 2>/dev/null; then
+                            JAR_TARGET="$SYS_MNT/system/framework/org.lineageos.platform.jar"
+                            if [ -f "$JAR_TARGET" ]; then
+                                unzip -p "$ZIP" halium-extras/system-patches/org.lineageos.platform.jar > "$JAR_TARGET" \
+                                    && chmod 644 "$JAR_TARGET" \
+                                    && rm -f "$SYS_MNT/system/framework/oat/arm64/org.lineageos.platform.odex" \
+                                             "$SYS_MNT/system/framework/oat/arm64/org.lineageos.platform.vdex" \
+                                    && ui_print "- org.lineageos.platform.jar patched, stale odex/vdex removed." \
+                                    || ui_print "WARNING: failed to inject org.lineageos.platform.jar patch."
+                            else
+                                ui_print "WARNING: org.lineageos.platform.jar not found on freshly-written"
+                                ui_print "  system partition -- skipping patch injection."
+                            fi
+                            sync
+                            umount "$SYS_MNT" 2>/dev/null
+                        else
+                            ui_print "WARNING: could not mount $SYSTEM_DEV to inject the"
+                            ui_print "  org.lineageos.platform.jar patch -- LongScreen crash-loop"
+                            ui_print "  fix will NOT be applied this flash."
+                        fi
+                        rmdir "$SYS_MNT" 2>/dev/null
+                    else
+                        ui_print "WARNING: write to $SYSTEM_DEV failed. Flash manually:"
+                        ui_print "  fastboot flash system system.img"
+                    fi
+                else
+                    ui_print "WARNING: unsparsed system.img ($RAW_SIZE bytes) does not fit"
+                    ui_print "the existing system slot ($DEV_SIZE bytes) — refusing to"
+                    ui_print "write (would corrupt neighboring super partitions)."
+                    ui_print "Flash manually instead: fastboot flash system system.img"
+                fi
+            else
+                ui_print "WARNING: simg2img failed. Flash manually:"
+                ui_print "  fastboot flash system system.img"
+            fi
+        else
+            ui_print "WARNING: failed to extract system.img from zip. Flash manually:"
+            ui_print "  fastboot flash system system.img"
+        fi
+        rm -f "$SPARSE_TMP" "$RAW_TMP"
+    fi
+else
+    ui_print "- No dynamic 'system' block device exposed by this TWRP."
+    ui_print "  system.img must be flashed separately via fastboot(d):"
+    ui_print "    fastboot flash system system.img"
+fi
+
+# --- rootfs.img ---
+# Reconstructed from 3 chunks (data/rootfs-chunks/rootfs.img.part-N), NOT
+# a single unzip -p of one big entry. Device only has ~5.5GB total RAM
+# (confirmed via /proc/meminfo 2026-07-20) and TWRP's toybox `unzip -p`
+# allocates a buffer close to the full UNCOMPRESSED entry size for each
+# extraction -- this crashed reliably even at 5.38GB ("scudo: Scudo ERROR:
+# internal map failure (NO MEMORY) requesting 5257888KB" -> SIGABRT in
+# unzip), while firmware/system.img (4.28GB) happened to still fit.
+# Plasma test image (в1, 2026-07-28): 3 chunks of exactly 4GB each --
+# under the 5.38GB crash ceiling, though with less margin than the
+# original 2.69GB chunks (12GB rootfs vs the 7.5GB Droidian one).
+#
+# UNLIKE v3, this image is NOT grown to fill /data afterward -- rootfs.img
+# stays at its shipped size permanently (just the OS + packages, no user
+# data). Matches the classic Halium/Ubuntu Touch pattern already used
+# elsewhere in this same project: keep the OS image small and fixed,
+# bind-mount /home from a plain directory on /userdata instead, so user
+# data naturally gets access to the FULL /data partition without ever
+# needing to resize an ext4-in-a-file image (see the /home bind-mount
+# setup further down, and DROIDIAN-V4-SYSTEMD-FIX-HOWTO.md).
+next_step 0.30 25
+ui_print "- Reassembling rootfs.img from chunks (avoids TWRP unzip OOM)..."
+rm -f /data/rootfs.img
+# Hardcoded list -- this TWRP's unzip does NOT support -Z1 (zipinfo mode)
+# for listing zip entries on-device (see halium-extras/* note further
+# down), so the chunk names/count can't be discovered dynamically here.
+# Must match exactly what's under data/rootfs-chunks/ in this zip --
+# regenerate this list together with the chunks (see DROIDIAN-V4-*-HOWTO.md).
+for part in \
+    rootfs.img.part-0 \
+    rootfs.img.part-1 \
+    rootfs.img.part-2 \
+; do
+    ui_print "  - $part"
+    unzip -p "$ZIP" "data/rootfs-chunks/$part" >> /data/rootfs.img || abort "failed to copy $part"
+done
+[ -s /data/rootfs.img ] || abort "rootfs.img reassembly produced an empty file"
+chown 0:0 /data/rootfs.img
+chmod 666 /data/rootfs.img
+
+# --- userdata overlay ---
+# НАЙДЕНО 2026-07-24 (перенесено сюда из низа файла): эта распаковка
+# ДОЛЖНА идти ПЕРЕД всеми точечными /data-деплой блоками ниже (gpu-bridge,
+# fix-linkerconfig-visibility, save/restore-state) -- userdata-overlay.tar.gz
+# всё ещё ссылается на СТАРЫЙ снепшот от v5 и молча затирает свежие файлы
+# теми же именами из старого архива, если распаковывается ПОСЛЕ них (как
+# было раньше -- подтверждено живо: fix-linkerconfig-visibility.sh на
+# устройстве оказался версией от 12 июля, без нашего фикса, после
+# "свежей" прошивки v14, именно из-за этого порядка).
+next_step 0.10 10
+ui_print "- Extracting userdata overlay into /data..."
+unzip -p "$ZIP" data/userdata-overlay.tar.gz | tar -xz -C /data || abort "failed to extract userdata-overlay.tar.gz"
+
+# phoc-0.47.0-old (the hwcomposer-capable downgrade build that
+# halium-gpu-bridge-setup.sh bind-mounts onto /usr/bin/phoc) ships
+# INSIDE userdata-overlay.tar.gz without its executable bit -- found
+# live (2026-07-21) on a fresh в7 flash: mount --bind preserves the
+# SOURCE file's permissions, so /usr/bin/phoc ended up non-executable
+# (rw-r--r--) and phosh.service crash-looped with "systemd-cat: Failed
+# to execute process: Permission denied" every restart. This has
+# apparently always been wrong inside the shared overlay tarball itself
+# (file dates from Jun 21 2026, same era as в5) -- never caught before
+# because every previous live test happened to inherit a warm instance
+# where the file had already been chmod'd by hand at some point. Not
+# repacking userdata-overlay.tar.gz for a one-byte permission fix (see
+# "no duplicate rootfs" project rule) -- just chmod it here instead,
+# right after extraction, every flash.
+chmod 755 /data/phoc-downgrade-backup/phoc-0.47.0-old 2>/dev/null || true
+
+# --- halium-gpu-bridge-setup.sh: MUST be deployed directly onto /data here,
+#     NOT via the rootfs-files "cp -a into rootfs.img" mechanism used
+#     everywhere else in this script. FOUND 2026-07-21 live (very late,
+#     first real fresh-flash test of the phoc-chmod fix): /userdata is a
+#     MOUNTPOINT for the real /data partition in the booted system, not a
+#     real path inside rootfs.img -- copying into
+#     "$ROOTFS_MNT/userdata/..." (which the generic rootfs-files cp -a does)
+#     writes into a dead, inaccessible directory that gets shadowed the
+#     moment the real /data gets mounted over it at boot. The ONLY reason
+#     this script existed on-device at all before now was because it got
+#     captured into userdata-overlay.tar.gz from an OLDER live snapshot --
+#     any live edit to rootfs-files/userdata/halium-gpu-bridge-setup.sh
+#     (like the unconditional chmod fix) NEVER reached the actual device,
+#     confirmed live (fresh v6 flash still ran the pre-fix script version,
+#     phosh.service crash-looped on phoc Permission Denied exactly like
+#     before that fix was "added"). Deploy explicitly here, same pattern as
+#     halium_sensor_bridge below.
+unzip -p "$ZIP" halium-extras/rootfs-files/userdata/halium-gpu-bridge-setup.sh > /data/halium-gpu-bridge-setup.sh \
+    || abort "failed to copy halium-gpu-bridge-setup.sh"
+chmod 755 /data/halium-gpu-bridge-setup.sh
+
+# --- fix-linkerconfig-visibility.sh: MUST be deployed directly onto /data
+#     here, same reasoning as halium-gpu-bridge-setup.sh above -- /data
+#     isn't part of rootfs.img's own filesystem tree at all. This script is
+#     bind-mounted by var/lib/lxc/android/mount.sh onto
+#     ${R}/system/framework/fix-linkerconfig-visibility.sh (that path IS
+#     inside rootfs.img's own mount.sh, deployed the normal way) and is
+#     re-executed by init.zygote64.rc's "onrestart exec" every time zygote
+#     crashes and gets respawned.
+#     NAYDENO 2026-07-24: this script existed on-device already (as a fix
+#     for an EARLIER, different linkerconfig regression -- see mount.sh
+#     comment history, "296+ падений подряд, интервал ровно 5с") but only
+#     ever patched visible=true into the TOP-LEVEL /linkerconfig/ld.config.txt
+#     namespace.com_android_art section. zygote64 crash-looped forever with
+#     "Error finding namespace of apex: no namespace called com_android_art"
+#     regardless -- root-caused live to the APEX'S OWN internal
+#     /linkerconfig/com.android.art/ld.config.txt, which describes its own
+#     namespace as "default" (not "com_android_art") and never had
+#     visible=true either. Confirmed live: adding the second sed here (this
+#     file, below) let zygote reach init.svc.zygote=running (real
+#     system_server work, not a crash-loop) instead of crashing every ~5s
+#     forever. Since this script's content previously only ever lived on
+#     the physical /userdata partition (never tracked in the repo, would be
+#     silently missing/no-op on a clean data wipe -- the mount.sh bind-mount
+#     falls back to an empty /dev/null-sourced file if the source is
+#     missing), it is now deployed here explicitly like the other
+#     /data-direct scripts.
+unzip -p "$ZIP" halium-extras/rootfs-files/userdata/fix-linkerconfig-visibility.sh > /data/fix-linkerconfig-visibility.sh \
+    || abort "failed to copy fix-linkerconfig-visibility.sh"
+chmod 755 /data/fix-linkerconfig-visibility.sh
+
+# --- halium-save-state.sh / halium-restore-state.sh: same /data-direct
+#     reasoning as fix-linkerconfig-visibility.sh above -- /userdata
+#     isn't a real path inside rootfs.img. Persists WiFi/Bluetooth/
+#     locale/polkit rules/clock/screen brightness across reboots (live-
+#     tested extensively в9/в10 2026-07-21/22) -- restore runs early
+#     (After=local-fs.target, Before=NetworkManager/bluetooth), save runs
+#     on a 2min timer. The corresponding .service/.timer units live in
+#     rootfs-files/etc/systemd/system/ (that path IS inside rootfs.img,
+#     deployed the normal cp -a way further down). ---
+unzip -p "$ZIP" halium-extras/rootfs-files/userdata/halium-save-state.sh > /data/halium-save-state.sh \
+    || abort "failed to copy halium-save-state.sh"
+chmod 755 /data/halium-save-state.sh
+unzip -p "$ZIP" halium-extras/rootfs-files/userdata/halium-restore-state.sh > /data/halium-restore-state.sh \
+    || abort "failed to copy halium-restore-state.sh"
+chmod 755 /data/halium-restore-state.sh
+
+# --- mount-patched-v3.sh: same /data-direct reasoning as the scripts above.
+#     FOUND 2026-07-30 (в4 rebuild on Droidian v20): this script was NEVER
+#     explicitly deployed here like its siblings -- it only ever reached
+#     /data via the stale userdata-overlay.tar.gz (an old v5 snapshot,
+#     extracted above), meaning any edit to
+#     halium-extras/rootfs-files/userdata/mount-patched-v3.sh silently had
+#     ZERO effect on a real flash, exactly the same class of bug already
+#     fixed for halium-gpu-bridge-setup.sh/fix-linkerconfig-visibility.sh/
+#     save-restore-state.sh above. Deploy explicitly, same pattern. ---
+unzip -p "$ZIP" halium-extras/rootfs-files/userdata/mount-patched-v3.sh > /data/mount-patched-v3.sh \
+    || abort "failed to copy mount-patched-v3.sh"
+chmod 755 /data/mount-patched-v3.sh
+
+# --- в2 (перенесено из v25): контейнер больше не стартует сам вообще
+#     (см. lxc@android.service.d/00-first-boot-gate.conf,
+#     ConditionPathExists=/userdata/CONTAINER_ENABLED). Изначально здесь
+#     маркер СБРАСЫВАЛСЯ при каждой прошивке (rm -f), чтобы избежать
+#     гонки при самой первой загрузке новой версии. в8 (2026-08-02)
+#     ненадолго заменил это на "touch" (маркер ставился сразу при
+#     флеше, контейнер стартовал без всякой задержки с t=0) -- решили,
+#     что гейт сам по себе достаточен и гонки больше нет. ОТКАЧЕНО
+#     ОБРАТНО 2026-09-06: гонка была не про сам гейт, а про ВРЕМЯ
+#     старта -- "touch" убирал вообще любую задержку, той же природы
+#     гонки, что уронила в5 на 5+ минут без картинки/SSH (см.
+#     FIXES-V7-DESKTOP-AND-AUTOSTART.md). Портирован рабочий механизм
+#     из соседнего Droidian-проекта на этом же устройстве
+#     (halium-container-autostart.sh/.service/.timer, см. эти файлы и
+#     FIXES-V8-CONTAINER-AUTOSTART-TIMER.md): единый таймер срабатывает
+#     через 25с после каждой загрузки, а решение "первый раз это или
+#     нет" (и, если да, +20с дополнительной задержки, итого 45с)
+#     принимается ВНУТРИ самого скрипта по наличию этого маркера -- то
+#     есть маркер снова должен СБРАСЫВАТЬСЯ при каждой прошивке, как
+#     было изначально, иначе скрипт решит, что это не первая загрузка,
+#     и не даст лишние 20с на стабилизацию. Заодно чистим старые
+#     маркеры от прежних (v22/v23) механизмов гейта. ---
+rm -f /data/CONTAINER_ENABLED
+rm -f /data/PHOSH_FIRST_BOOT_OK
+rm -f /data/halium-first-boot-gate.log
+
+# --- halium_sensor_bridge: placed directly on /data (never touches
+#     vendor.img) -- halium-install-sensor-bridge.service copies it into
+#     /vendor/bin on every boot, see that script for why. ---
+mkdir -p /data/halium-vendor-inject
+unzip -p "$ZIP" halium-extras/android-data-files/halium_sensor_bridge > /data/halium-vendor-inject/halium_sensor_bridge \
+    || abort "failed to copy halium_sensor_bridge"
+chmod 755 /data/halium-vendor-inject/halium_sensor_bridge
+
+# --- kernel-modules-fixed: WCD938x/Bolero/Q6 audio, touch (synaptics_ts),
+#     BT-power and sensor-bridge .ko's read by halium-load-audio-modules.sh/
+#     halium-load-touch-modules.sh/halium-load-bt-power.sh/
+#     halium-install-sensor-bridge.sh via MODDIR=/userdata/kernel-modules-fixed.
+#     Same /data-direct pattern as halium_sensor_bridge above (NOT
+#     rootfs-files -- /userdata isn't a real path inside rootfs.img, see
+#     halium-gpu-bridge-setup.sh comment above). Built 2026-07-22 against
+#     the CONFIG_QCOM_APR=n kernel fix (see droidian-boot-v4-audiofix.img) --
+#     unconditionally overwrites whatever's already in kernel-modules-fixed
+#     on the device, since these are the definitive versions matching the
+#     boot.img this zip ships. ---
+mkdir -p /data/kernel-modules-fixed
+unzip -p "$ZIP" halium-extras/android-data-files/kernel-modules-fixed.tar.gz | tar -xz -C /data/kernel-modules-fixed \
+    || abort "failed to extract kernel-modules-fixed.tar.gz"
+chmod 644 /data/kernel-modules-fixed/*.ko
+
+# --- Whole-root RW overlay (Task 1 + Task 3 from DROIDIAN-V10-PLAN.md).
+#     The initrd (scripts/halium in droidian-boot-v4-audiofix.img) already
+#     has this mechanism built in and TESTED-IN-CODE, just gated behind two
+#     marker files it never found before:
+#       mount -t overlay rootfs -o lowerdir=/halium-system,
+#           upperdir=/tmpmnt/rootfs-overlay,workdir=/tmpmnt/rootfs-overlay-workdir
+#           /halium-system
+#     ($imagefile/rootfs.img stays the small, fixed, effectively-read-only
+#     lower layer -- exactly like Android's /system -- while EVERY write
+#     anywhere under "/" lands on upperdir, i.e. the real ~98GB /userdata
+#     partition instead of the 4.9GB image. This is why apt ran out of
+#     space after installing a handful of GNOME apps.) BOTH markers are
+#     required together -- .writable_image_overlay alone still hits the
+#     "else: mount -o remount,ro /halium-system" branch right after
+#     (mounting the FRESH OVERLAY read-only, undoing everything), because
+#     that branch only skips when .writable_image is ALSO present. NOT YET
+#     BOOT-TESTED -- a previous, unrelated attempt at automatic RW root
+#     (halium-early-remount-rw.service, a later systemd-stage remount)
+#     broke one boot once and was reverted without full diagnosis, so
+#     treat this as its untested replacement, not a proven-safe repeat. ---
+touch /data/.writable_image /data/.writable_image_overlay
+
+# --- Inject Halium fixup units + libhybris bridge libs directly into the
+#     just-copied rootfs.img, so a plain/unmodified rootfs.img can be used
+#     in this zip and still come out fully patched. Bundled as loose files
+#     under halium-extras/ in this zip (not baked into rootfs.img itself). ---
+ROOTFS_MNT=/mnt/halium-rootfs-inject
+mkdir -p "$ROOTFS_MNT"
+next_step 0.15 5
+if mount -t ext4 -o rw /data/rootfs.img "$ROOTFS_MNT"; then
+    # NOTE (2026-07-22): a sed fix used to live here targeting
+    # $ROOTFS_MNT/etc/fstab for the root rw/ro flag -- turned out to be a
+    # dead end. That file is just a static "# UNCONFIGURED FSTAB FOR BASE
+    # SYSTEM" placeholder, never actually read at boot. The REAL
+    # /etc/fstab is a bind-mount onto a fresh /run/image.fstab, rebuilt
+    # from scratch every boot by process_bind_mounts() in the initrd
+    # (scripts/halium), which unconditionally writes
+    # "/dev/root / rootfs defaults,ro 0 0" as its first line regardless
+    # of any file inside rootfs.img. The actual fix is in the boot.img's
+    # ramdisk itself (see droidian-boot-v5-fstabfix.img) -- confirmed via
+    # direct TWRP loop-mount inspection of a fresh v10 flash.
+
+    # FOUND 2026-07-30 (в5): /vendor and /system exist as persistent empty
+    # directories baked into the shared rootfs.img from way back (this
+    # script's own comments elsewhere note they were "created once via
+    # mount -o remount,rw /; mkdir -p /vendor /system; mount -o remount,ro
+    # /"), but /firmware/image (needed by halium-gpu-bridge-setup.sh's
+    # direct a660_zap firmware lookup path fix) never got the same
+    # one-time treatment -- confirmed live: host root boots as a read-only
+    # overlay, "mkdir: /firmware: Read-only file system" on every fresh
+    # flash. rootfs.img is a plain rw ext4 mount right here, before the
+    # overlay boot scheme is even in the picture -- create it now so it's
+    # already there every boot, no live remount,rw workaround needed.
+    mkdir -p "$ROOTFS_MNT/firmware/image"
+
+    ui_print "- Injecting systemd units into rootfs.img..."
+    UNITDIR="$ROOTFS_MNT/etc/systemd/system"
+    mkdir -p "$UNITDIR/multi-user.target.wants" "$UNITDIR/sysinit.target.wants" "$UNITDIR/timers.target.wants" "$UNITDIR/local-fs.target.wants" "$UNITDIR/basic.target.wants" "$UNITDIR/sockets.target.wants"
+
+    # --- /home bind-mount from /userdata (classic Halium/Ubuntu Touch
+    #     pattern -- keep rootfs.img small+fixed forever, let user data use
+    #     the FULL /data partition via a plain directory bind-mount instead
+    #     of resizing an ext4-in-a-file image). /userdata is the same
+    #     partition as /data, already mounted and used throughout this
+    #     project (e.g. /userdata/mount-patched-v3.sh) well before systemd
+    #     starts, so a plain unit ordered after local-fs-pre.target with
+    #     RequiresMountsFor is sufficient -- no special early-boot hook
+    #     needed like rootfs.img's own loop-mount (that one has to exist
+    #     before systemd even starts, this one doesn't). ---
+    mkdir -p /data/phosh-home-data
+    chmod 755 /data/phosh-home-data
+    # FOUND 2026-07-21 live, first fresh-flash test: with /data wiped,
+    # /data/phosh-home-data/phablet (-> /home/phablet after the bind-mount
+    # above) didn't exist yet. phosh.service's WorkingDirectory=%h resolves
+    # to /home/phablet, and systemd's chdir() there before even running
+    # ExecStartPre=halium-bounce-composer.sh fails outright
+    # (code=exited, status=200/CHDIR) -- confirmed live: phosh.service
+    # crash-looped 231 times in a row on a fresh flash before this was
+    # created by hand. Pre-create it here so it exists before phosh.service
+    # ever runs on a fresh install.
+    mkdir -p /data/phosh-home-data/phablet
+    chown 1000:1000 /data/phosh-home-data/phablet
+    chmod 755 /data/phosh-home-data/phablet
+    # NOTE (v5, 2026-07-20): this unit used to be written via
+    # `cat > file << 'EOF' ... EOF`. On this TWRP's ash, that heredoc
+    # needs to create its own internal temp file to buffer the body, and
+    # that failed ("can't create temporary file: No such file or
+    # directory") -- `cat` then ran with an empty stdin, so `>` still
+    # created home.mount but left it 0 bytes (no [Mount] section at
+    # all), and since the failure wasn't on a checked command, the
+    # script never aborted -- v4 flashed "successfully" with a
+    # completely inert /home bind-mount. Rewritten as a flat sequence of
+    # `printf` appends, which needs no temp file, to avoid the same trap
+    # in every step below that writes multi-line content (units/*.service
+    # are plain `cp`, not heredocs, so they're unaffected).
+    printf '%s\n' \
+        '[Unit]' \
+        'Description=Bind-mount /home from /userdata/phosh-home-data (full /data space for user data)' \
+        'RequiresMountsFor=/userdata' \
+        'DefaultDependencies=no' \
+        'Before=local-fs.target' \
+        'Conflicts=umount.target' \
+        '' \
+        '[Mount]' \
+        'What=/userdata/phosh-home-data' \
+        'Where=/home' \
+        'Type=none' \
+        'Options=bind' \
+        '' \
+        '[Install]' \
+        'WantedBy=local-fs.target' \
+        > "$UNITDIR/home.mount" || abort "failed to write home.mount unit"
+    [ -s "$UNITDIR/home.mount" ] || abort "home.mount was written but is empty"
+    ln -sf ../home.mount "$UNITDIR/local-fs.target.wants/home.mount"
+
+    # --- plasma-mobile-wf.service fixes (found live 2026-07-29, see project
+    #     memory project_plasma_mobile_wf_gpu_compositor) -- this unit and
+    #     its stock drop-ins ship baked into rootfs.img itself (under
+    #     usr/lib/systemd/system/, NOT in halium-extras/rootfs-files, since
+    #     it's shared with в1/в3 via the same base image), so this is the
+    #     only place these three fixes can be injected without touching the
+    #     shared master rootfs.img used by other version folders. Original
+    #     goal (explicit user requirement, as of в7): after a fresh flash,
+    #     ONLY the container start itself stays manual (CONTAINER_ENABLED
+    #     gate) -- everything else, including the compositor, must already
+    #     be correctly wired. REVISED 2026-09-06 (в8, explicit user
+    #     request): container start is now automatic too, via
+    #     halium-container-autostart.timer (25s after boot, 45s on the very
+    #     first boot after a flash) -- see that unit and
+    #     FIXES-V8-CONTAINER-AUTOSTART-TIMER.md. The CONTAINER_ENABLED gate
+    #     itself (lxc@android.service.d/00-first-boot-gate.conf) is
+    #     unchanged; the timer's own script creates the marker before
+    #     calling systemctl start, so the gate is always already open by
+    #     then. Everything else below this comment is unaffected.
+    PLASMA_UNIT_LIB="$ROOTFS_MNT/usr/lib/systemd/system/plasma-mobile-wf.service.d"
+    PLASMA_UNIT_ETC="$UNITDIR/plasma-mobile-wf.service.d"
+    if [ -d "$PLASMA_UNIT_LIB" ]; then
+        mkdir -p "$PLASMA_UNIT_ETC"
+
+        # Fix 1: HYBRIS_LD_LIBRARY_PATH/LD_LIBRARY_PATH/ANDROID_ROOT are
+        # needed for wayfire's hwcomposer backend to find
+        # libhwc2_compat_layer.so and libminisf.so via libhybris -- without
+        # them wayfire segfaults instantly on start ("library
+        # libhwc2_compat_layer.so not found" -> immediate SIGSEGV in
+        # backend/hwcomposer/backend.c). ExecStartPre runs the same
+        # /vendor+/system+/dev/__properties__ host bind-mount script phosh
+        # already uses (98-gpu-bridge.conf), now also patched (see
+        # halium-gpu-bridge-setup.sh) to fix the a660_zap firmware race.
+        printf '%s\n' \
+            '[Service]' \
+            'Environment=HYBRIS_LD_LIBRARY_PATH=/opt/halium-lxc-bridge/system-lib64:/opt/halium-lxc-bridge/vendor-lib64' \
+            'Environment=LD_LIBRARY_PATH=/opt/halium-lxc-bridge/system-lib64:/opt/halium-lxc-bridge/vendor-lib64' \
+            'Environment=ANDROID_ROOT=/android' \
+            'ExecStartPre=+/userdata/halium-gpu-bridge-setup.sh' \
+            'TimeoutStartSec=150' \
+            > "$PLASMA_UNIT_ETC/60-hybris-ld-path.conf" || abort "failed to write plasma-mobile-wf 60-hybris-ld-path.conf"
+
+        # Fix 2: the stock 50-chvt.conf's ExecStartPost=+chvt 7 races with
+        # systemd's own TTYVHangup=yes/TTYReset=yes handling of TTYPath and
+        # kills the just-started process with SIGHUP in ~100-150ms, before
+        # it prints a single line of output. systemd already activates the
+        # VT via TTYPath -- this manual chvt is redundant. phosh.service
+        # (same TTYPath/TTYVHangup/TTYReset/TTYVTDisallocate config
+        # otherwise) has no chvt drop-in at all. Move the stock file aside
+        # rather than override it -- an empty ExecStartPost= drop-in also
+        # works but moving it aside is the confirmed-clean fix.
+        if [ -f "$PLASMA_UNIT_LIB/50-chvt.conf" ]; then
+            mv "$PLASMA_UNIT_LIB/50-chvt.conf" "$PLASMA_UNIT_LIB/50-chvt.conf.disabled"
+        fi
+
+        # Fix 3: stock 40-droid-wait.conf sets
+        # BindsTo=android-service@hwcomposer.service, which is too tight --
+        # any transient hwcomposer flap (the container itself is
+        # intermittently flaky) immediately tears plasma-mobile-wf.service
+        # down too. An empty "BindsTo=" override in a later drop-in did NOT
+        # clear it in live testing (unclear why) -- moving the origin file
+        # aside was the confirmed-clean fix.
+        #
+        # UPDATED 2026-08-18 (в6, Droidian-parity session): a "loose"
+        # Requires=+After= replacement used to be written here instead of
+        # BindsTo=, but live testing this session showed even THAT is
+        # unnecessary and actively harmful -- android-service@hwcomposer.service
+        # races the container's own internal Android boot independently and
+        # is prone to exhausting its restart-rate-limit before the container
+        # is ever manually started, at which point plasma-mobile-wf.service
+        # hard-fails too ("Dependency failed"), even though it already has
+        # everything it needs on its own via 60-hybris-ld-path.conf
+        # (ANDROID_ROOT=/android + its own ExecStartPre=halium-gpu-bridge-
+        # setup.sh) -- matching how Droidian's phosh.service does it (no
+        # equivalent intermediary unit at all). Just disable the stock file,
+        # don't replace it with anything.
+        if [ -f "$PLASMA_UNIT_LIB/40-droid-wait.conf" ]; then
+            mv "$PLASMA_UNIT_LIB/40-droid-wait.conf" "$PLASMA_UNIT_LIB/40-droid-wait.conf.disabled"
+        fi
+
+        ui_print "- plasma-mobile-wf.service GPU/chvt/BindsTo fixes injected."
+    else
+        ui_print "WARNING: plasma-mobile-wf.service.d not found in rootfs.img -- fixes NOT injected."
+    fi
+
+    # Note: this TWRP's busybox unzip doesn't support -Z1 (zipinfo mode) for
+    # listing matching entries — extract the whole halium-extras/ subtree to
+    # a scratch dir instead and copy from there (also used for the bridge
+    # libs below).
+    rm -rf /data/.halium-extras-tmp
+    unzip -o -q "$ZIP" 'halium-extras/*' -d /data/.halium-extras-tmp || abort "failed to extract halium-extras from zip"
+    EXTRAS=/data/.halium-extras-tmp/halium-extras
+
+    cp "$EXTRAS"/units/*.service "$UNITDIR/" 2>/dev/null
+    cp "$EXTRAS"/units/*.timer "$UNITDIR/" 2>/dev/null
+    # NOTE (Droidian/Phosh port): the Ubuntu Touch build also injected a
+    # lightdm.service.d/ drop-in here (zz-composer-delay.conf, a Mir-
+    # compositor-specific race workaround) and enabled halium-composer-
+    # recovery.service, halium-install-sensorfw-hidl.service, and
+    # halium-kick-location-service.service. None of those apply to this
+    # Phosh rootfs (no lightdm, no Mir, no lomiri-location-service, no
+    # sensorfw) -- all four were removed from halium-extras/units/ (and the
+    # lightdm.service.d dir isn't shipped at all) rather than just leaving
+    # them as silent no-ops, to keep this list honest about what's actually
+    # in use.
+
+    for u in halium-mount-patch halium-touch-modules halium-fix-art-namespace \
+             halium-start-adbd halium-fix-flash-perm halium-fix-torch-perm \
+             halium-stop-fps-spam halium-save-clock \
+             halium-load-bt-power halium-load-audio-modules halium-fix-audio-hal \
+             halium-fix-phone-radio-conflict \
+             halium-fix-backlight-perm \
+             halium-fix-gst-hybris \
+             halium-kick-camera-service \
+             halium-wifi-crashloop-watchdog \
+             halium-audiopolicy-crashloop-watchdog \
+             halium-fix-crashdump-storm \
+             halium-install-sensor-bridge \
+             halium-sensor-bridge-watchdog; do
+        [ -f "$UNITDIR/$u.service" ] && ln -sf "../$u.service" "$UNITDIR/multi-user.target.wants/$u.service"
+    done
+    # halium-audio-watchdog: periodic re-check, timer-triggered (not a
+    # boot-time one-shot like the others above) -- only the .timer needs
+    # enabling, it pulls in the .service itself when it fires.
+    [ -f "$UNITDIR/halium-audio-watchdog.timer" ] && ln -sf "../halium-audio-watchdog.timer" "$UNITDIR/timers.target.wants/halium-audio-watchdog.timer"
+    # halium-container-autostart: портировано 2026-09-06 из Droidian-
+    # проекта (см. halium-container-autostart.sh и
+    # FIXES-V8-CONTAINER-AUTOSTART-TIMER.md) -- заменяет собой прежний
+    # crude "touch /data/CONTAINER_ENABLED прямо при флеше" (см. правки
+    # маркера выше). Единственный постоянный таймер на каждую загрузку;
+    # база таймера и внутренняя задержка скрипта менялись по факту
+    # живых тестов (в9: 25с/45с, в10: 45с/55с — см. историю тайминга в
+    # самом halium-container-autostart.sh); lxc@android.service.d/
+    # 00-first-boot-gate.conf (ConditionPathExists=/userdata/
+    # CONTAINER_ENABLED) остаётся как есть -- скрипт создаёт маркер ДО
+    # вызова systemctl start, так что гейт всегда уже открыт к этому
+    # моменту.
+    [ -f "$UNITDIR/halium-container-autostart.timer" ] && ln -sf "../halium-container-autostart.timer" "$UNITDIR/timers.target.wants/halium-container-autostart.timer"
+    # halium-fix-plasmashell-icons: найдено 2026-09-07, живой тест на
+    # этом устройстве -- задокументированный (но раньше не исправленный)
+    # баг Kirigami.Icon, зависающего на status=Loading (см. README
+    # halium13-plasma-mobile-m52xq, "Known issues"), гоночный (не на
+    # каждой загрузке). Подтверждённый обходной путь: перезапуск ТОЛЬКО
+    # plasmashell (не всего wayfire+kwin стека) через ~5с после старта
+    # сбрасывает зависшее состояние. См.
+    # halium-fix-plasmashell-icons.sh.
+    [ -f "$UNITDIR/halium-fix-plasmashell-icons.timer" ] && ln -sf "../halium-fix-plasmashell-icons.timer" "$UNITDIR/timers.target.wants/halium-fix-plasmashell-icons.timer"
+    # halium-plasma-shell-watchdog: УБРАН в в12 (2026-09-07) -- живой
+    # инцидент в12: ложно срабатывал на КАЖДОЙ свежей загрузке (kwin_
+    # wayland/plasmashell ещё не успевают стартовать после wayfire в
+    # отведённый грейс-период -- 25с оказалось мало под реальной
+    # нагрузкой свежего boot), убивая только что поднявшийся, живой
+    # shell собственным "лечением". По прямому запросу пользователя
+    # убран целиком, а не перенастроен -- файлы (halium-plasma-shell-
+    # watchdog.sh/.timer/.service) больше не входят в halium-extras.
+    # halium-phosh-watchdog: restarts phosh.service if phoc has been alive
+    # >90s with no shell client (the "eternal logo" stuck state). Made
+    # unconditional (not "-f" gated) -- this exact conditional-before-copy
+    # ordering bug silently dropped the symlink before (see git history /
+    # HOWTO for в8-в9).
+    ln -sf "../halium-phosh-watchdog.timer" "$UNITDIR/timers.target.wants/halium-phosh-watchdog.timer"
+    [ -f "$UNITDIR/halium-restore-clock.service" ] && ln -sf "../halium-restore-clock.service" "$UNITDIR/sysinit.target.wants/halium-restore-clock.service"
+    [ -f "$UNITDIR/halium-watchdog-kick.service" ] && ln -sf "../halium-watchdog-kick.service" "$UNITDIR/sysinit.target.wants/halium-watchdog-kick.service"
+    # FOUND 2026-07-21 late night, via v2's old "eternal logo" root-cause
+    # writeup: this unit (mount -o remount,rw /, Before=systemd-journald.service)
+    # existed in rootfs-files already but was NEVER enabled anywhere -- so
+    # journald kept falling back to volatile Storage=auto (explains why
+    # journalctl behaved unreliably/mixed entries across boots all session),
+    # and any live edit under / not specifically bind-mounted from /userdata
+    # was never guaranteed to survive a reboot.
+    #
+    # NOT ENABLED (deliberately, for now): tried enabling this live +
+    # rebooting the same night -- the very next boot never came up at all
+    # (no adb, no network, no SSH, no external SD detected for 15+ minutes,
+    # had to go back to TWRP). Reverted the live enable-symlink (both
+    # rootfs.img's own copy and the /userdata/system-data mirror) to get
+    # back to the last known-working state; did NOT have time to confirm
+    # whether this unit was actually the cause or just a coincidence (could
+    # equally be the chronic usb-moded-ssh instability, general I/O
+    # contention documented elsewhere in this doc, or something else
+    # entirely). Left the enable-symlink line commented out below --
+    # re-enable and test in isolation (one boot, nothing else changed)
+    # before trusting it.
+    #[ -f "$UNITDIR/halium-early-remount-rw.service" ] && ln -sf "../halium-early-remount-rw.service" "$UNITDIR/sysinit.target.wants/halium-early-remount-rw.service"
+    [ -f "$UNITDIR/halium-fix-android-tmpfs-size.service" ] && ln -sf "../halium-fix-android-tmpfs-size.service" "$UNITDIR/sysinit.target.wants/halium-fix-android-tmpfs-size.service"
+    # selinux_check_access() userspace patch (found in v2 project session,
+    # Находка 17; reapplied+automated 2026-07-21): with no sepolicy loaded
+    # (intentional -- see feedback_no_sepolicy_load), the wait_for_coldboot_done
+    # builtin action in android::init hangs forever because its property SET
+    # is rejected by the permission check. Patching libselinux.so's
+    # selinux_check_access() to unconditionally return 0 (allow) unblocks
+    # this -- confirmed in v2 to be what let zygote start for the first time.
+    # Must run before lxc-android-config.service (see its own After=/Before=).
+    # BUG FOUND 2026-07-21 live (first real fresh-flash test of this
+    # mechanism): this unit ships under usr/lib/systemd/system/ (same as
+    # lxc-android-config.service, halium-force-usb-developer-mode.service
+    # etc.), NOT under etc/systemd/system/ like halium-restore-clock.service/
+    # halium-watchdog-kick.service above -- the "-f $UNITDIR/..." check
+    # above tests the WRONG path (etc/systemd/system/), is always false, and
+    # the symlink never gets created. Confirmed via live TWRP loop-mount
+    # inspection: service/script/patch .bin files all present, but
+    # etc/systemd/system/sysinit.target.wants/ had no entry for this unit at
+    # all. Root cause of the SELinux patch never running on a truly fresh
+    # flash (worked in-session only because we'd already live-patched the
+    # running instance by hand before this bug was found) -- and very
+    # likely the root cause of a ~10+ minute total adb/network silence on
+    # that same fresh boot too: without the patch, wait_for_coldboot_done
+    # hangs android::init forever, lxc-android-config.service (which execs
+    # lxc-start -F in the foreground) never returns, and its
+    # Before=sysinit.target ordering can stall the whole boot transaction
+    # behind it, delaying every later target (multi-user.target, sshd,
+    # usb-moded) that depends on sysinit.target completing.
+    ln -sf "/lib/systemd/system/halium-patch-selinux-checkaccess.service" "$UNITDIR/sysinit.target.wants/halium-patch-selinux-checkaccess.service"
+    # halium-disable-lockscreen.service: auto-applies require-unlock=false
+    # on first boot. Unconditional (not "-f" gated) -- same ordering bug
+    # as above.
+    ln -sf "../halium-disable-lockscreen.service" "$UNITDIR/multi-user.target.wants/halium-disable-lockscreen.service"
+    # halium-restore-state.service / halium-save-state.timer: same
+    # unconditional pattern (ordering bug fix, not "-f" gated) --
+    # persistence for WiFi/Bluetooth/locale/polkit/clock/brightness.
+    ln -sf "../halium-restore-state.service" "$UNITDIR/multi-user.target.wants/halium-restore-state.service"
+    ln -sf "../halium-save-state.timer" "$UNITDIR/timers.target.wants/halium-save-state.timer"
+    # usb-moded rescue-mode loop fix (2026-07-10/11): usb-moded only leaves its
+    # built-in rescue mode (mass-storage 0afe, cycling every ~90s) once it gets
+    # a D-Bus init-done signal, which normally comes from graphical.target --
+    # but that never starts here (no working Android graphical session), so
+    # usb0/RNDIS never stays up without this. Fires init-done on multi-user.target
+    # instead, confirmed live to restore SSH after a fresh v26 install.
+    [ -f "$UNITDIR/usb-early-init-done.service" ] && ln -sf "../usb-early-init-done.service" "$UNITDIR/multi-user.target.wants/usb-early-init-done.service"
+    # FOUND 2026-07-31 (в5, telephony/calc/gallery/lockscreen/autostart
+    # session): seatd.service + lxc@android.service autostart symlinks
+    # created explicitly here, NOT shipped as loose symlinks under
+    # halium-extras/rootfs-files -- TWRP's unzip does not preserve real
+    # symlinks (extracts them as plain text files containing the target
+    # path string instead), which would silently corrupt these into
+    # garbage and break autostart entirely with no obvious error at
+    # flash time. seatd.service already ships baked into rootfs.img
+    # itself (usr/lib/systemd/system/); lxc@.service is the stock
+    # lxc-android-config template unit. Both targets are absolute paths
+    # since /usr/lib/systemd/system (not $UNITDIR) is where the actual
+    # unit files live.
+    [ -f "$ROOTFS_MNT/usr/lib/systemd/system/seatd.service" ] && ln -sf "/usr/lib/systemd/system/seatd.service" "$UNITDIR/multi-user.target.wants/seatd.service"
+    # FOUND 2026-07-31 (в6): lxc@android.service autostart disabled again --
+    # after flashing в5 with container autostart enabled, the device showed
+    # no picture/no ssh/no desktop for 5+ minutes on first boot. pstore
+    # console-ramoops from that boot showed systemd DID reach PID 1 and ran
+    # a clean systemd-shutdown ("reboot: Power down") at 389s uptime, so this
+    # wasn't a kernel panic/crash -- container autostart is the prime suspect
+    # for whatever delayed/blocked the boot from becoming usable in that
+    # window. Disabled here to isolate it; container is started manually via
+    # SSH again until root-caused. Do NOT re-enable without re-testing.
+    # [ -f "$ROOTFS_MNT/usr/lib/systemd/system/lxc@.service" ] && ln -sf "/usr/lib/systemd/system/lxc@.service" "$UNITDIR/multi-user.target.wants/lxc@android.service"
+    # Force one extra lxc-android-config restart at 71.7s device uptime to
+    # dodge a native linker-namespace race ("no namespace called
+    # com_android_art"). Skips itself on the very first boot after flashing
+    # (marker file /userdata/.halium-uptime-restart-seen) -- see script for why.
+    # ВРЕМЕННО ОТКЛЮЧЕНО (2026-07-13): маркер-файл переживает переустановку
+    # (не на /data, который форматируется, а живёт годами), так что "skip on
+    # first boot" по факту никогда не срабатывает на уже использовавшемся
+    # userdata -- сервис может сработать на САМОЙ ПЕРВОЙ загрузке после
+    # прошивки и разорвать старт lightdm/компоситора на середине. Включить
+    # обратно только по явной просьбе -- раскомментировать строку ниже.
+    # [ -f "$UNITDIR/halium-lxc-uptime-restart.service" ] && ln -sf "../halium-lxc-uptime-restart.service" "$UNITDIR/multi-user.target.wants/halium-lxc-uptime-restart.service"
+
+    mkdir -p "$ROOTFS_MNT/usr/libexec"
+    cp "$EXTRAS"/libexec/* "$ROOTFS_MNT/usr/libexec/" 2>/dev/null
+    chmod 755 "$ROOTFS_MNT"/usr/libexec/*
+
+    ui_print "- Injecting libhybris bridge libraries into rootfs.img (~240MB)..."
+    mkdir -p "$ROOTFS_MNT/opt/halium-lxc-bridge"
+    cp -a "$EXTRAS/lxc-bridge-libs/system-lib64" "$ROOTFS_MNT/opt/halium-lxc-bridge/"
+    cp -a "$EXTRAS/lxc-bridge-libs/vendor-lib64" "$ROOTFS_MNT/opt/halium-lxc-bridge/"
+
+    # WORKAROUND: TWRP's busybox/toybox unzip does not preserve Unix symlinks
+    # when extracting entries from the zip -- a symlink entry (which zip
+    # stores as data = target path string) gets extracted as a REGULAR FILE
+    # containing just that path string as literal text, not a real symlink.
+    # cp -a then faithfully copies that broken stub alongside the real files.
+    # Any such stub loaded as a shared library is a text file, not ELF --
+    # this silently breaks Mir/EGL init (found 2026-07-15, cost a full day
+    # of debugging: "eglInitialize failure: EGL_SUCCESS" from double-loading
+    # a partially-registered stub in the search path).
+    # Detect (< 200 bytes, content starts with our known symlink target
+    # prefix) and repair by recreating a real symlink.
+    for f in "$ROOTFS_MNT/opt/halium-lxc-bridge/system-lib64"/*; do
+        [ -f "$f" ] || continue
+        sz=$(wc -c < "$f" 2>/dev/null)
+        [ -n "$sz" ] && [ "$sz" -lt 200 ] || continue
+        target=$(cat "$f" 2>/dev/null)
+        case "$target" in
+            /android/*)
+                rm -f "$f"
+                ln -sf "$target" "$f"
+                ;;
+        esac
+    done
+    ui_print "- Bridge libraries injected OK."
+
+    # --- Generic Android-bridge files: ofono/bluebinder/rmtfs/tqftpserv
+    #     binaries+units, gbinder/glibutil/mce-glib libs, udev rules
+    #     (including the ones granting access to /dev/kgsl-3d0 + /dev/ion),
+    #     lxc-android-config helper scripts, pulse/halium-overrides audio
+    #     routing config. NOTE (Droidian/Phosh port): the Ubuntu Touch
+    #     build also injected the Mir "ubports:android2" graphics platform
+    #     .so files here (client-platform/android2.so + server-platform/
+    #     graphics-android2.so) -- those were REMOVED from this zip's
+    #     halium-extras/rootfs-files entirely, since Phosh renders through
+    #     phoc/wlroots' own hwcomposer backend (libwlroots12a from
+    #     Droidian's repo) instead of Mir -- shipping the Mir .so files
+    #     here would be dead weight at best, an Ubuntu-vs-Debian glibc/
+    #     libstdc++ ABI mismatch risk at worst. ---
+    ui_print "- Injecting Android-bridge files (ofono/bluebinder/udev/etc.)..."
+    cp -a "$EXTRAS"/rootfs-files/. "$ROOTFS_MNT/"
+
+    # FOUND 2026-07-31 (в5, telephony/calc/gallery session): same TWRP
+    # unzip-does-not-preserve-symlinks issue as the lxc-bridge-libs repair
+    # below, but for a different set of files -- 19 relative symlinks
+    # (KF6Contacts/People/PeopleBackend/PeopleWidgets runtime libs added
+    # for plasma-dialer's contacts integration, plus opencv/tbb/hwloc/
+    # gfortran/blas/lapack runtime deps added for koko's image editor).
+    # These are RELATIVE symlinks within the same directory (e.g.
+    # "libKF6Contacts.so -> libKF6Contacts.so.6"), unlike lxc-bridge-libs'
+    # absolute /android/* targets, so repaired separately here rather than
+    # reusing that loop's /android/* case match.
+    for d in "$ROOTFS_MNT/usr/lib/aarch64-linux-gnu" "$ROOTFS_MNT/usr/lib/aarch64-linux-gnu/blas" "$ROOTFS_MNT/usr/lib/aarch64-linux-gnu/lapack"; do
+        for f in "$d"/lib{KF6Contacts.so,KF6Contacts.so.6,KF6People.so,KF6People.so.6,KF6PeopleBackend.so,KF6PeopleBackend.so.6,KF6PeopleWidgets.so,KF6PeopleWidgets.so.6,KQuickImageEditor.so.1,opencv_core.so.410,opencv_imgproc.so.410,tbb.so.12,tbbmalloc.so.2,tbbmalloc_proxy.so.2,tbbbind_2_5.so.3,hwloc.so.15,gfortran.so.5,blas.so.3,lapack.so.3}; do
+            [ -f "$f" ] || continue
+            [ -L "$f" ] && continue
+            sz=$(wc -c < "$f" 2>/dev/null)
+            [ -n "$sz" ] && [ "$sz" -lt 200 ] || continue
+            target=$(cat "$f" 2>/dev/null)
+            case "$target" in
+                lib*.so*)
+                    rm -f "$f"
+                    ln -sf "$target" "$f"
+                    ;;
+            esac
+        done
+    done
+
+    # FOUND 2026-07-31 (в6, live post-flash session): kscreenlocker_greet
+    # gets spawned with --immediateLock right at every plasma-mobile-wf
+    # session start (confirmed live: new instance appears within 1s of
+    # every "systemctl restart plasma-mobile-wf.service", even though
+    # ksmserver/plasma_session are invoked with --no-lockscreen -- something
+    # else in the wf session chain (not startplasmamobile-wf itself, grepped
+    # clean) triggers it independently, root cause not fully pinned down).
+    # User decision this session (and previously, see FIXES-V5-LOCKSCREEN-
+    # INVESTIGATION.md): remove the lock screen entirely rather than chase
+    # every trigger path. chmod 000 is a hard guarantee regardless of what
+    # ends up invoking it -- confirmed live: kills the running process AND
+    # prevents any future exec (root can still `chmod` it back if ever
+    # needed for a real login prompt).
+    [ -f "$ROOTFS_MNT/usr/lib/aarch64-linux-gnu/libexec/kscreenlocker_greet" ] && \
+        chmod 000 "$ROOTFS_MNT/usr/lib/aarch64-linux-gnu/libexec/kscreenlocker_greet"
+
+    # (40-droid-wait-loose.conf / android-service@hwcomposer.service
+    # dependency: fixed at the source above, in the plasma-mobile-wf.service.d
+    # "Fix 3" block -- 40-droid-wait.conf now just gets disabled, nothing
+    # replaces it. See that comment for the live-tested Droidian-parity
+    # reasoning.)
+
+    # FOUND 2026-08-18 (в6): the lxc@android.service cascade-start drop-in
+    # tried earlier this session (ExecStartPost triggering
+    # android-service@hwcomposer.service synchronously) is NOT shipped here
+    # -- confirmed live it's actively harmful: ExecStartPost blocks
+    # lxc@android.service's OWN start-post phase until the nested systemctl
+    # chain finishes, and when that took too long, systemd's start-post
+    # timeout SIGKILLed the entire running container. Not needed anyway now
+    # that plasma-mobile-wf.service self-sufficiently waits/retries via its
+    # own ExecStartPre + Restart=always.
+
+    # FOUND 2026-07-29: getprop and other bridge consumers need
+    # /opt/halium-lxc-bridge/{system,vendor}-lib64 in the ld.so search
+    # path system-wide, not just via a per-unit Environment=LD_LIBRARY_PATH
+    # drop-in (that only covers processes systemd spawns directly for that
+    # unit, not subprocesses a running daemon execs later with its own
+    # environment -- confirmed live via repeated getprop failures in
+    # /data/usb-moded-debug.log even after usb-moded.service's own
+    # LD_LIBRARY_PATH fix). etc/ld.so.conf.d/zz-halium-lxc-bridge.conf
+    # (just deployed by the cp -a above) lists the paths; run ldconfig
+    # here, at install time, so the cache is already correct at first
+    # boot with no boot-order dependency.
+    if [ -f "$ROOTFS_MNT/etc/ld.so.conf.d/zz-halium-lxc-bridge.conf" ]; then
+        chroot "$ROOTFS_MNT" ldconfig 2>&1 | while read -r line; do ui_print "  ldconfig: $line"; done
+        ui_print "- ldconfig cache rebuilt for bridge libraries."
+    fi
+
+    # --- polkit no-password reboot/power-off/suspend fix (2026-07-22,
+    #     live-diagnosed via busctl monitor to catch the REAL action id --
+    #     it's "org.freedesktop.login1.reboot-ignore-inhibit" etc, NOT
+    #     the plain "org.freedesktop.login1.reboot" that earlier guesses
+    #     assumed, because something holds a shutdown inhibitor lock and
+    #     logind needs the *-ignore-inhibit variant authorized to
+    #     override it). Two parts needed together:
+    #     1) /etc/polkit-1/rules.d/49-nopasswd-power.rules itself (copied
+    #        above by the generic cp -a) needs its PARENT DIRS at 755 --
+    #        polkitd runs as its own unprivileged user and silently can't
+    #        even list a 700 rules.d (found 2026-07-21, still true here).
+    #     2) polkit-agent-helper-1 (the PAM-checking binary invoked WHEN
+    #        a password dialog does show, e.g. for actions not covered
+    #        by the rule above) was missing its setuid bit entirely on
+    #        this rootfs.img -- "needs to be setuid root" spammed in the
+    #        journal on every single keystroke, meaning NO password,
+    #        correct or not, could ever have worked. Not the actual
+    #        reason 0000 got rejected today (the rule above avoids the
+    #        dialog entirely for reboot/power-off/suspend) but a real,
+    #        separate bug worth fixing for any OTHER polkit action that
+    #        still needs genuine authentication.
+    chmod 755 "$ROOTFS_MNT/etc/polkit-1" "$ROOTFS_MNT/etc/polkit-1/rules.d" 2>/dev/null || true
+    chmod 644 "$ROOTFS_MNT/etc/polkit-1/rules.d/49-nopasswd-power.rules" 2>/dev/null || true
+    # 49-nopasswd-packagekit.rules (2026-07-23): same no-auth pattern for
+    # GNOME Software/PackageKit installs (org.freedesktop.packagekit.*),
+    # which hit the identical broken-setuid-helper auth dialog.
+    chmod 644 "$ROOTFS_MNT/etc/polkit-1/rules.d/49-nopasswd-packagekit.rules" 2>/dev/null || true
+    chmod u+s "$ROOTFS_MNT/usr/lib/polkit-1/polkit-agent-helper-1" 2>/dev/null || true
+
+    # SAFETY NET (found 2026-07-15, generalized 2026-07-16): on at least
+    # one real flash, TWRP's toybox cp -a/unzip corrupted
+    # usr/lib/aarch64-linux-gnu/libglibutil.so.1.0.75 into a tiny
+    # (21-byte) text stub containing its own filename, even though the
+    # SAME file is a healthy regular (non-symlink) 77248-byte ELF .so
+    # both in the source rootfs-files tree and inside this zip -- i.e.
+    # the corruption happens during extraction/copy on-device, not in
+    # the archive.
+    #
+    # 2026-07-16: the SAME corruption hit usr/lib/aarch64-linux-gnu/
+    # libgbinder.so.1.1.40 on a completely separate flash (20 bytes
+    # instead of 151712) -- confirming this is a systematic toybox cp -a
+    # bug affecting files that are the REAL target of a multi-level
+    # symlink chain (libX.so.N -> libX.so.N.M -> libX.so.N.M.P), not a
+    # one-off fluke tied to libglibutil specifically. That single
+    # corrupted file took down bluebinder (bluetooth), ofonod (mobile
+    # network -- GetModems returned an empty array) AND repowerd
+    # (brightness/flashlight, since it links libgbinder too) all at
+    # once with a generic "file too short" linker error, and repowerd
+    # in particular stayed in `systemctl` failed state silently for the
+    # rest of the boot since nothing ever retries it.
+    #
+    # Verify size post-copy and re-extract directly from the zip
+    # (bypassing cp -a's tree-copy path entirely) for every file in this
+    # list if it looks wrong. Add any other multi-level-symlinked .so
+    # found corrupted in the future to this same list.
+    for rel in \
+        usr/lib/aarch64-linux-gnu/libglibutil.so.1.0.75 \
+        usr/lib/aarch64-linux-gnu/libgbinder.so.1.1.40 \
+        usr/lib/aarch64-linux-gnu/libgbinder-radio.so.1 \
+    ; do
+        f="$ROOTFS_MNT/$rel"
+        if [ -f "$f" ]; then
+            fsz=$(wc -c < "$f" 2>/dev/null)
+            if [ -n "$fsz" ] && [ "$fsz" -lt 10000 ]; then
+                ui_print "- WARNING: $rel looks corrupted ($fsz bytes), re-extracting from zip..."
+                unzip -p "$ZIP" "halium-extras/rootfs-files/$rel" > "$f"
+                chmod 755 "$f"
+            fi
+        fi
+    done
+
+    # lxc-android-config.service: left UNMASKED, but deliberately NOT
+    # enabled via any .wants/ symlink of its own. History of attempts
+    # (all confirmed live): multi-user.target.wants never actually fired
+    # the unit (ConditionResult stuck "no" for 500+s, no job ever
+    # queued); sysinit.target.wants DID start it reliably but broke SSH
+    # entirely on that boot (forces the WHOLE sysinit.target -- and
+    # everything ordered after it, incl. network/dbus/SSH -- to wait on
+    # this one heavy unit). The actual fix: halium-start-container-delayed
+    # .service below explicitly `systemctl start`s it (a direct command,
+    # already confirmed live to be fully reliable and to never affect
+    # SSH/usb-moded-ssh) from a tiny oneshot unit that itself only runs
+    # After=multi-user.target -- i.e. strictly after SSH is already up.
+    # Explicitly ensure no stale mask/enable symlink survives from a
+    # previous flash/version in either place a running system reads
+    # /etc/systemd/system from (see SYSDATA_UNITDIR note below --
+    # confirmed live 2026-07-24 that fixing only $UNITDIR, inside
+    # rootfs.img, is NOT enough; a running system's real
+    # /etc/systemd/system is bind-mounted from
+    # /data/system-data/etc/systemd/system instead).
+    rm -f "$UNITDIR/lxc-android-config.service"
+    rm -f "$UNITDIR/multi-user.target.wants/lxc-android-config.service"
+    rm -f "$UNITDIR/sysinit.target.wants/lxc-android-config.service"
+
+    SYSDATA_UNITDIR="/data/system-data/etc/systemd/system"
+    if [ -d "$SYSDATA_UNITDIR" ] || mkdir -p "$SYSDATA_UNITDIR" 2>/dev/null; then
+        rm -f "$SYSDATA_UNITDIR/lxc-android-config.service"
+        rm -f "$SYSDATA_UNITDIR/multi-user.target.wants/lxc-android-config.service"
+        rm -f "$SYSDATA_UNITDIR/sysinit.target.wants/lxc-android-config.service"
+    fi
+
+    # halium-start-container-delayed.service: the actual fix -- starts
+    # the container via an explicit `systemctl start` command (not a
+    # passive .wants pull-in) from a oneshot unit ordered strictly
+    # After=multi-user.target, so it can only ever run once SSH is
+    # already up. Enable in BOTH locations, same reasoning as above.
+    [ -f "$ROOTFS_MNT/etc/systemd/system/halium-start-container-delayed.service" ] && {
+        ln -sf "../halium-start-container-delayed.service" \
+            "$UNITDIR/multi-user.target.wants/halium-start-container-delayed.service"
+        if [ -d "$SYSDATA_UNITDIR" ]; then
+            mkdir -p "$SYSDATA_UNITDIR/multi-user.target.wants"
+            ln -sf "../halium-start-container-delayed.service" \
+                "$SYSDATA_UNITDIR/multi-user.target.wants/halium-start-container-delayed.service"
+        fi
+    }
+
+    # seatd.service: same zip-dereference trap as lxc-android-config above,
+    # but self-inflicted this time -- v18 shipped BOTH the real
+    # usr/lib/systemd/system/seatd.service file AND a literal
+    # multi-user.target.wants/seatd.service symlink pointing at it in the
+    # SAME rootfs-files tree. Since the symlink's target existed on the
+    # build host, `zip -9 -r` (no -y) happily dereferenced it into a
+    # regular file copy instead of storing a symlink -- confirmed live
+    # 2026-07-24: `ls -la` showed `-rw-r--r--` (plain file, same 156
+    # bytes as the real unit) at that path, and `systemctl status
+    # seatd.service` reported "disabled" because of it, so seatd never
+    # auto-started on the v18 flash (this is what silently broke the
+    # ЗАДАЧА 17 seatd fix on first boot -- phoc fell back to logind and
+    # hit the old ~20s session-loss bug again). Enable at flash time
+    # instead, same pattern as lxc-android-config/bluebinder/tqftpserv.
+    [ -f "$ROOTFS_MNT/usr/lib/systemd/system/seatd.service" ] && \
+        ln -sf "../seatd.service" "$UNITDIR/multi-user.target.wants/seatd.service"
+
+    # NAJDENO 2026-07-24: same /data/system-data shadow-mount issue as
+    # lxc-android-config above -- userdata-overlay.tar.gz's stale copy of
+    # multi-user.target.wants/seatd.service (a plain file, same
+    # zip-dereference bug baked into an OLD archive snapshot) shadows
+    # whatever we write into $UNITDIR at the real running system's
+    # /etc/systemd/system. Fix both.
+    if [ -d "$SYSDATA_UNITDIR" ]; then
+        rm -f "$SYSDATA_UNITDIR/multi-user.target.wants/seatd.service"
+        ln -sf "../seatd.service" "$SYSDATA_UNITDIR/multi-user.target.wants/seatd.service"
+    fi
+
+    # bluebinder.service ships as a rootfs-files/usr/lib/systemd/system entry
+    # (just copied above) rather than units/*.service, since it's a real
+    # upstream package unit (not one of our own halium-* units) — enable it
+    # the same way now that it's actually in place.
+    [ -f "$ROOTFS_MNT/usr/lib/systemd/system/bluebinder.service" ] && \
+        ln -sf "../bluebinder.service" "$UNITDIR/multi-user.target.wants/bluebinder.service"
+
+    # halium-power-wake-watchdog.service: same rootfs-files pattern as
+    # bluebinder above. в16, СОЗДАНО 2026-09-08 (перенесено в эту
+    # в14-базированную сборку как в20) -- будит session (systemctl
+    # restart plasma-mobile-wf.service) на короткое нажатие кнопки
+    # питания, НО ТОЛЬКО если DRM dpms реально "Off" (застрявший экран
+    # после сна). В отличие от убранного в в12
+    # halium-plasma-shell-watchdog.sh, не гадает по таймингам загрузки
+    # вообще -- условие срабатывания это измеримое состояние ядра плюс
+    # факт физического нажатия кнопки, ложных срабатываний на обычной
+    # загрузке структурно быть не может (см. комментарий в самом
+    # скрипте, usr/libexec/halium-power-wake-watchdog.py).
+    [ -f "$ROOTFS_MNT/usr/lib/systemd/system/halium-power-wake-watchdog.service" ] && \
+        ln -sf "../halium-power-wake-watchdog.service" "$UNITDIR/multi-user.target.wants/halium-power-wake-watchdog.service"
+
+    # tqftpserv.service: same pattern as bluebinder.service above (real
+    # upstream-style unit shipped under rootfs-files, not our own halium-*
+    # units) -- QRTR-TFTP firmware-serving daemon, cross-compiled from
+    # github.com/andersson/tqftpserv.
+    #
+    # rmtfs.service is DELIBERATELY NOT enabled via multi-user.target here --
+    # enabling it that way starts rmtfs too early (races ahead of /dev/uio0
+    # appearing), rmtfs exhausts its systemd restart budget before the uio
+    # node exists, and the modem then crashes on "EFS: rmts_get_buffer api
+    # failed" since rmtfs never came up. rmtfs must start SOLELY via the udev
+    # trigger in 71-rmtfs.rules (ENV{SYSTEMD_WANTS}="rmtfs.service"), which
+    # fires exactly when /dev/uio0 (name=rmtfs) appears -- no race. Its unit
+    # file also has no [Install] section anymore, on purpose.
+    [ -f "$ROOTFS_MNT/usr/lib/systemd/system/tqftpserv.service" ] && \
+        ln -sf "../tqftpserv.service" "$UNITDIR/multi-user.target.wants/tqftpserv.service"
+
+    # halium-force-usb-developer-mode.service: same pattern as bluebinder/
+    # tqftpserv above (real unit shipped under rootfs-files, not our own
+    # units/*.service list) -- found 2026-07-20 to have been present in
+    # rootfs-files/ (carried forward from the v2-era SSH-saga fix, see
+    # DROIDIAN-V2-SYSTEMD-FIX-HOWTO.md "финал SSH-саги") but NEVER enabled
+    # by any update-binary version since -- the file just sat inert at
+    # usr/lib/systemd/system/, no basic.target.wants symlink, so usb-moded
+    # always fell back to its safe default (mass_storage/charging) and SSH
+    # never came up on v3/v4. Its own [Install] says WantedBy=basic.target.
+    [ -f "$ROOTFS_MNT/usr/lib/systemd/system/halium-force-usb-developer-mode.service" ] && \
+        ln -sf "../halium-force-usb-developer-mode.service" "$UNITDIR/basic.target.wants/halium-force-usb-developer-mode.service"
+
+    # lxc-android-config-disable-ssh-socket.service: found 2026-07-21 --
+    # a vendor unit shipped by the lxc-android-config package itself
+    # (Description="Fix mistake which leave ssh.socket enabled by
+    # default", ExecStart="systemctl disable --now ssh.socket") that
+    # actively disables our own openssh-server's ssh.socket on every
+    # boot where it hasn't yet self-masked (its own ExecStartPost is
+    # "systemctl mask" itself, but that apparently never completed on
+    # this rootfs -- the unit was still WantedBy=multi-user.target and
+    # unmasked, confirmed live). Whatever "mistake" this was written to
+    # fix upstream, WE want ssh.socket enabled -- mask the vendor unit
+    # outright so it can never run again, and explicitly enable
+    # ssh.socket ourselves (belt-and-suspenders alongside whatever
+    # openssh-server's own postinst did/didn't do).
+    ln -sf /dev/null "$UNITDIR/lxc-android-config-disable-ssh-socket.service"
+    rm -f "$UNITDIR/multi-user.target.wants/lxc-android-config-disable-ssh-socket.service"
+    [ -f "$ROOTFS_MNT/usr/lib/systemd/system/ssh.socket" ] && \
+        ln -sf "../../../../usr/lib/systemd/system/ssh.socket" "$UNITDIR/sockets.target.wants/ssh.socket"
+
+    # ANDROID_ROOT must be set system-wide for ANY host-side process that
+    # touches libhybris (pulseaudio, start-android-container, and now
+    # phosh.service via its own hwcomposer.conf drop-in) to find Android
+    # input/config files. Redundant with the per-service Environment= lines
+    # but harmless and a useful fallback for anything that doesn't have its
+    # own drop-in yet.
+    if ! grep -q '^ANDROID_ROOT=' "$ROOTFS_MNT/etc/environment" 2>/dev/null; then
+        echo "ANDROID_ROOT=/android" >> "$ROOTFS_MNT/etc/environment"
+    fi
+
+    # Mask sysdiag.service: on the Ubuntu Touch base rootfs.img this project
+    # normally starts from, this is a leftover debug logger baked in at
+    # /lib/systemd/system (not our own overlay) that dumps a full "systemctl
+    # list-units --all" to /userdata/sysdiag.txt every 2s forever — grows
+    # into the gigabytes if left running (confirmed: 216MB in just 35
+    # minutes). This Debian+Phosh rootfs is a fresh debootstrap and almost
+    # certainly does NOT have this vendor-baked unit at all -- the [ -f ]
+    # guard makes this a safe no-op either way, kept for parity with the
+    # Ubuntu Touch build in case a future Phosh rootfs base ever does ship it.
+    mkdir -p "$ROOTFS_MNT/etc/systemd/system"
+    [ -f "$ROOTFS_MNT/lib/systemd/system/sysdiag.service" ] && \
+        ln -sf /dev/null "$ROOTFS_MNT/etc/systemd/system/sysdiag.service"
+
+    # Mask watchdog-kick.service: a stock/vendor unit baked into this base
+    # rootfs.img (/lib/systemd/system, vendor preset "enabled" so it starts
+    # every boot regardless of `systemctl enable` state) that also tries to
+    # feed /dev/watchdog, racing our own halium-watchdog-kick.service
+    # (which correctly holds the fd open via `exec 3<>`, see
+    # halium-watchdog-kicker.sh comment for the ~100-103s silent-hard-reset
+    # background). This vendor unit uses `echo 1 > /dev/watchdog` in a loop
+    # (open/write/close every 10s, and ALSO pokes /dev/watchdog0 — a
+    # different, wrong node per that same comment) — found 2026-07-16 after
+    # a genuinely unexplained spontaneous reboot: this unit was spamming
+    # "cannot create /dev/watchdog: Device or resource busy" for the unit's
+    # entire lifetime, confirming it fights our kicker for the fd. Masking
+    # it removes the race entirely; our own kicker alone is sufficient.
+    # Same [ -f ] guard as sysdiag.service above -- likely a no-op on this
+    # fresh Debian rootfs, kept for parity.
+    [ -f "$ROOTFS_MNT/lib/systemd/system/watchdog-kick.service" ] && \
+        ln -sf /dev/null "$ROOTFS_MNT/etc/systemd/system/watchdog-kick.service"
+
+    # в2 (перенесено из v25): та же "3 места" маскировка, что живьём
+    # проверенно сработала ещё на v21 -- halium-start-container-delayed.
+    # service/.timer масками на /dev/null ПРЯМО В ОБРАЗЕ.
+    # halium-restore-state.sh (на /userdata) продолжает каждую загрузку
+    # писать "cat > .../halium-start-container-delayed.service <<EOF"
+    # поверх этого пути -- но раз это симлинк на /dev/null, запись уходит
+    # в никуда, а сам симлинк остаётся цел. lxc-android-config.service
+    # сам по себе НЕ маскируется тем же способом (halium-restore-state.sh
+    # делает "rm -f" именно по этому пути каждую загрузку, снесло бы
+    # симлинк-маску) -- единственная надёжная точка контроля для него --
+    # ConditionPathExists в lxc-android-config.service.d/00-first-boot-
+    # gate.conf (тот путь restore-state.sh не трогает).
+    ln -sf /dev/null "$ROOTFS_MNT/etc/systemd/system/halium-start-container-delayed.service"
+    ln -sf /dev/null "$ROOTFS_MNT/etc/systemd/system/halium-start-container-delayed.timer"
+    rm -rf /data/.halium-extras-tmp
+    # НАЙДЕНО 2026-07-22 (живой TWRP-осмотр после зависшей загрузки в10):
+    # без явного sync перед umount образ на следующем loop-mount требовал
+    # recovery журнала (EXT4-fs (loopN): recovery complete) -- не
+    # фатально, но лишняя задержка на каждой первой загрузке. sync
+    # гарантирует, что все страницы действительно сброшены на диск до
+    # размонтирования.
+    sync
+    umount "$ROOTFS_MNT"
+    ui_print "- rootfs.img fully patched (units + bridge libs + android2 Mir +"
+    ui_print "  udev + lxc-android-config auto-start fix + sysdiag/watchdog-kick masks)."
+else
+    ui_print "WARNING: could not loop-mount rootfs.img to inject units/libs."
+    ui_print "  (this TWRP may lack ext4 write support for large loop images)"
+fi
+
+# --- userdata overlay ---
+# FOUND 2026-07-30 (в5): this used to re-extract userdata-overlay.tar.gz
+# a SECOND time here (identical unzip|tar line already ran once, much
+# earlier in this script, right after rootfs.img reassembly -- see the
+# "ДОЛЖНА идти ПЕРЕД всеми точечными /data-деплой блоками" comment up
+# there). This second, unconditional extraction silently overwrote every
+# /data-direct point-fix deployed in between (mount-patched-v3.sh,
+# halium-gpu-bridge-setup.sh, fix-linkerconfig-visibility.sh) with the
+# stale v5-era tarball content -- confirmed live: a freshly-deployed
+# mount-patched-v3.sh (with the surfaceflinger-stub / a660_zap fixes)
+# ended up back at its old 87400-byte, pre-fix content on /data after a
+# real flash, and the container hit the exact a660_zap crash the stub
+# was supposed to prevent. Removed the duplicate extraction entirely --
+# the first one (early in this script) already puts everything from the
+# tarball on /data; the chmod/touch fixups below don't need a second
+# extraction to run correctly, the files are already there.
+
+# phoc-0.47.0-old (the hwcomposer-capable downgrade build that
+# halium-gpu-bridge-setup.sh bind-mounts onto /usr/bin/phoc) ships
+# INSIDE userdata-overlay.tar.gz without its executable bit -- found
+# live (2026-07-21) on a fresh в7 flash: mount --bind preserves the
+# SOURCE file's permissions, so /usr/bin/phoc ended up non-executable
+# (rw-r--r--) and phosh.service crash-looped with "systemd-cat: Failed
+# to execute process: Permission denied" every restart. This has
+# apparently always been wrong inside the shared overlay tarball itself
+# (file dates from Jun 21 2026, same era as в5) -- never caught before
+# because every previous live test happened to inherit a warm instance
+# where the file had already been chmod'd by hand at some point. Not
+# repacking userdata-overlay.tar.gz for a one-byte permission fix (see
+# "no duplicate rootfs" project rule) -- just chmod it here instead,
+# right after extraction, every flash.
+chmod 755 /data/phoc-downgrade-backup/phoc-0.47.0-old 2>/dev/null || true
+
+# FOUND 2026-07-21 (live test, cross-referenced from DROIDIAN-V2-SYSTEMD-
+# FIX-HOWTO.md): the initrd's scripts/halium (baked into the patched
+# boot.img we ship, droidian-boot-v3-writablesystem.img) only mounts the
+# dynamic-partition Android system device read-write if these two marker
+# files exist on /data BEFORE boot -- otherwise it falls back to the
+# hardcoded `-o ro` branch, which reproduces the whole ELOOP-on-exec("/init")
+# saga (system/bin -> /system/bin self-reference loop) that v2 spent days
+# chasing. Without a fresh flash ever creating them, every clean install
+# regresses back to read-only /system regardless of the boot.img patch
+# itself being correct. Create them unconditionally here.
+touch /data/.writable_device_image /data/.writable_image
+
+next_step 0.05 1
+ui_print "======================================"
+ui_print " DONE: boot.img, vendor_boot.img, system.img, rootfs.img,"
+ui_print " userdata overlay installed."
+if [ -z "$SYSTEM_DONE" ]; then
+    ui_print ""
+    ui_print " REMINDER: system.img was NOT written."
+    ui_print " Flash it separately in fastboot(d):"
+    ui_print "   fastboot flash system system.img"
+fi
+ui_print "======================================"
+
+exit 0

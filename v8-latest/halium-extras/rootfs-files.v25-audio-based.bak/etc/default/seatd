@@ -1,2 +1,0 @@
-# Allow access to video group members.
-DAEMON_ARGS="-g video"

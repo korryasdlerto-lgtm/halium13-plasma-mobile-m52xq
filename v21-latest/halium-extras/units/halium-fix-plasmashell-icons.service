@@ -1,0 +1,7 @@
+[Unit]
+Description=Restart plasmashell once to work around the Kirigami.Icon stuck-at-Loading race (invisible homescreen icons)
+After=plasma-mobile-wf.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/halium-fix-plasmashell-icons.sh

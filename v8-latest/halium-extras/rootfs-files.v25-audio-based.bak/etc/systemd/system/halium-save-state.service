@@ -1,6 +1,0 @@
-[Unit]
-Description=Periodically + on shutdown save NetworkManager/Bluetooth state and clock to persistent storage
-
-[Service]
-Type=oneshot
-ExecStart=/userdata/halium-save-state.sh

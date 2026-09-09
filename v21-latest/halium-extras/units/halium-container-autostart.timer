@@ -1,0 +1,9 @@
+[Unit]
+Description=Fire halium-container-autostart.service 45s after boot (script adds 10s more on the very first boot)
+
+[Timer]
+OnBootSec=45s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

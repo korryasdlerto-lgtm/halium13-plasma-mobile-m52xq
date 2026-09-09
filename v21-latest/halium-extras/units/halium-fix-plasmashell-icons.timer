@@ -1,0 +1,9 @@
+[Unit]
+Description=Fire halium-fix-plasmashell-icons.service 5s after boot (по явному запросу; риск -- plasmashell может ещё не успеть запуститься за 5с, тогда скрипт просто пропустит себя, см. halium-fix-plasmashell-icons.sh)
+
+[Timer]
+OnBootSec=5s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,6 @@
+# relevant files are not documentation, they are databases for translating
+# geographical coordinates into political/administrative references
+koko-data: package-contains-documentation-outside-usr-share-doc [usr/share/koko/*.txt]
+
+# That’s the address from the license text found in LGPLv2 / v2.1…
+koko-data: old-fsf-address-in-copyright-file

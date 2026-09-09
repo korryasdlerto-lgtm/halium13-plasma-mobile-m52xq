@@ -1,0 +1,12 @@
+[Unit]
+Description=Disable Phosh lockscreen unlock-code requirement on first boot
+After=user@1000.service phosh.service
+Wants=user@1000.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/halium-disable-lockscreen.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

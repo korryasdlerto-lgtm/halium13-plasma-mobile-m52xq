@@ -1,6 +1,0 @@
-[Unit]
-Description=Restart pulseaudio.service if it fell back to auto_null (module-droid-card lost the boot-time race against /vendor mount)
-
-[Service]
-Type=oneshot
-ExecStart=/usr/libexec/halium-pulseaudio-sink-watchdog.sh

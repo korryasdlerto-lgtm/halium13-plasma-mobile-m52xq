@@ -1,5 +1,0 @@
-# usr/bin/koko is quite intuitive graphical app
-koko: no-manual-page [usr/bin/koko]
-
-# That’s the address from the license text found in LGPLv2 / v2.1…
-koko: old-fsf-address-in-copyright-file

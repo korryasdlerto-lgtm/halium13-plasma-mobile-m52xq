@@ -1,0 +1,52 @@
+#!/bin/sh
+
+check_wayfire_config()
+{
+    if [ ! -e  /home/$USER/.config/plasma-mobile-wf/wayfire.ini ]; then
+        mkdir -p /home/$USER/.config/plasma-mobile-wf/
+        cp /usr/share/plasma-mobile-wf/wayfire.ini /home/$USER/.config/plasma-mobile-wf/wayfire.ini
+        chmod u+w /home/$USER/.config/plasma-mobile-wf/wayfire.ini
+    fi
+
+    return 0
+}
+
+# в16, НАЙДЕНО+ПОДТВЕРЖДЕНО ЖИВЬЁМ 2026-09-08 (перенесено в эту
+# в14-базированную сборку как в20): wallpaperplugin=org.kde.image по
+# умолчанию (без явного Image=) пытается открыть .../wallpapers/
+# DebianTheme/contents/images/1920x1080.svg -- пакета DebianTheme
+# (desktop-base) на этом образе НЕТ вообще (вычищен вместе с
+# остальным ещё раньше), реальный QML-плагин тихо фейлится ("Cannot
+# open"), рабочий стол/экран блокировки рисуются просто серым фоном
+# -- живьём воспринималось как "серый экран"/баг. Реально установлена
+# только тема Next (org.kde.wallpapers), причём с готовым ПОРТРЕТНЫМ
+# разрешением 1440x2960 -- как раз под этот экран. Патчим явный
+# Image= в конфиг домашнего экрана, если его там ещё нет.
+#
+# ИЗВЕСТНОЕ ОГРАНИЧЕНИЕ: конфиг создаётся самим plasma-mobile-wf при
+# первом входе, а не шаблоном из halium-extras -- на самом первом
+# запуске после чистого /userdata (свежий флеш+wipe) файла ещё нет,
+# фикс применится только начиная со ВТОРОГО запуска сессии.
+fix_wallpaper()
+{
+    CONF="/home/$USER/.config/plasma-org.kde.plasma.mobileshell-appletsrc"
+    if [ -f "$CONF" ] && ! grep -q '^Image=' "$CONF"; then
+        sed -i '/^wallpaperplugin=org.kde.image$/a Image=file:///usr/share/wallpapers/Next/contents/images/1440x2960.png' "$CONF"
+    fi
+}
+
+export KSCREEN_BACKEND=KSC_QScreen.so
+export KSCREEN_BACKEND_INPROCESS=KSC_QScreen.so
+export KDE_NO_KWIN=1
+
+check_wayfire_config
+fix_wallpaper
+
+# в16, НАЙДЕНО 2026-09-08 (перенесено в эту в14-базированную сборку
+# как в20): /usr/libexec/flashlightd -- мёртвая ссылка, унаследованная
+# из соседнего Droidian-проекта вместе со всем этим скриптом -- у них
+# есть реальный пакет с этим демоном, в этом проекте он никогда не
+# переносился/не собирался. Раньше засорял журнал "Нет такого файла
+# или каталога" на каждой загрузке (фоновый job, само по себе не
+# ломало сессию, просто шум). Убрано.
+dbus-run-session -- bash -c 'exec wayfire -c ~/.config/plasma-mobile-wf/wayfire.ini'

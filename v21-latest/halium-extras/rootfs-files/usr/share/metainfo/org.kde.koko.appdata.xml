@@ -1,0 +1,445 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-License-Identifier: CC0-1.0
+SPDX-FileCopyrightText: 2018 Aleix Pol <aleixpol@kde.org>
+-->
+<component type="desktop-application">
+  <id>org.kde.koko.desktop</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LGPL-2.1-only OR LGPL-3.0-only</project_license>
+  <developer id="org.kde">
+    <name translate="no">KDE</name>
+  </developer>
+  <name>Photos</name>
+  <name xml:lang="ar">الصور</name>
+  <name xml:lang="bg">Снимки</name>
+  <name xml:lang="ca">Fotos</name>
+  <name xml:lang="ca-valencia">Fotos</name>
+  <name xml:lang="cs">Fotografie</name>
+  <name xml:lang="da">Billeder</name>
+  <name xml:lang="de">Fotos</name>
+  <name xml:lang="en-GB">Photos</name>
+  <name xml:lang="eo">Fotoj</name>
+  <name xml:lang="es">Fotos</name>
+  <name xml:lang="eu">Argazkiak</name>
+  <name xml:lang="fi">Valokuvat</name>
+  <name xml:lang="fr">Photos</name>
+  <name xml:lang="gl">Fotos</name>
+  <name xml:lang="he">תמונות</name>
+  <name xml:lang="hi">तस्वीरें</name>
+  <name xml:lang="hu">Fényképek</name>
+  <name xml:lang="ia">Photos</name>
+  <name xml:lang="it">Foto</name>
+  <name xml:lang="ka">ფოტოები</name>
+  <name xml:lang="ko">사진</name>
+  <name xml:lang="lv">Fotogrāfijas</name>
+  <name xml:lang="nl">Foto's</name>
+  <name xml:lang="pl">Zdjęcia</name>
+  <name xml:lang="pt-BR">Fotos</name>
+  <name xml:lang="ru">Фотографии</name>
+  <name xml:lang="sa">फोटो</name>
+  <name xml:lang="sk">Fotografie</name>
+  <name xml:lang="sl">Fotografije</name>
+  <name xml:lang="sv">Foton</name>
+  <name xml:lang="tr">Fotoğraflar</name>
+  <name xml:lang="uk">Фотографії</name>
+  <name xml:lang="zh-CN">照片</name>
+  <name xml:lang="zh-TW">相片</name>
+  <summary>Image Gallery</summary>
+  <summary xml:lang="ar">معرض الصور</summary>
+  <summary xml:lang="ast">Galería d'imáxenes</summary>
+  <summary xml:lang="bg">Галерия с изображения</summary>
+  <summary xml:lang="ca">Galeria d'imatges</summary>
+  <summary xml:lang="ca-valencia">Galeria d'imatges</summary>
+  <summary xml:lang="cs">Galerie obrázků</summary>
+  <summary xml:lang="da">Billedgalleri</summary>
+  <summary xml:lang="de">Bildergalerie</summary>
+  <summary xml:lang="el">Συλλογή εικόνων</summary>
+  <summary xml:lang="en-GB">Image Gallery</summary>
+  <summary xml:lang="eo">Bildgalerio</summary>
+  <summary xml:lang="es">Galería de imágenes</summary>
+  <summary xml:lang="et">Pildigalerii</summary>
+  <summary xml:lang="eu">Irudi-galeria</summary>
+  <summary xml:lang="fi">Kuvagalleria</summary>
+  <summary xml:lang="fr">Galerie d'images</summary>
+  <summary xml:lang="gl">Galería de imaxes</summary>
+  <summary xml:lang="he">גלריית תמונות</summary>
+  <summary xml:lang="hi">छवि गैलरी</summary>
+  <summary xml:lang="hu">Képgaléria</summary>
+  <summary xml:lang="ia">Galeria de Imagines</summary>
+  <summary xml:lang="id">Galeri Citra</summary>
+  <summary xml:lang="it">Galleria di immagini</summary>
+  <summary xml:lang="ka">სურათების გალერეა</summary>
+  <summary xml:lang="ko">이미지 갤러리</summary>
+  <summary xml:lang="lv">Attēlu galerija</summary>
+  <summary xml:lang="nl">Galerij van afbeeldingen</summary>
+  <summary xml:lang="nn">Biletgalleri</summary>
+  <summary xml:lang="pa">ਚਿੱਤਰ ਗੈਲਰੀ</summary>
+  <summary xml:lang="pl">Galeria obrazów</summary>
+  <summary xml:lang="pt">Galeria de Imagens</summary>
+  <summary xml:lang="pt-BR">Galeria de imagens</summary>
+  <summary xml:lang="ru">Галерея изображений</summary>
+  <summary xml:lang="sa">चित्रसङ्ग्रहालयः</summary>
+  <summary xml:lang="sk">Galéria obrázkov</summary>
+  <summary xml:lang="sl">Galerija slik</summary>
+  <summary xml:lang="sv">Bildgalleri</summary>
+  <summary xml:lang="tr">Görsel Galerisi</summary>
+  <summary xml:lang="uk">Галерея зображень</summary>
+  <summary xml:lang="zh-CN">图像库</summary>
+  <summary xml:lang="zh-TW">圖片庫</summary>
+  <description>
+    <p>An Image gallery application</p>
+    <p xml:lang="ar">تطبيق معرض صور</p>
+    <p xml:lang="bg">Програма за галерии с изображения</p>
+    <p xml:lang="ca">Una aplicació de galeria d'imatges</p>
+    <p xml:lang="ca-valencia">Una aplicació de galeria d'imatges</p>
+    <p xml:lang="cs">Aplikace s galerií obrázků</p>
+    <p xml:lang="da">Et program til billedgalleri</p>
+    <p xml:lang="de">Eine Bildergalerie-Anwendung</p>
+    <p xml:lang="el">Μια εφαρμογή συλλογής εικόνων</p>
+    <p xml:lang="en-GB">An Image gallery application</p>
+    <p xml:lang="eo">Bildgaleria aplikaĵo</p>
+    <p xml:lang="es">Aplicación para galerías de imágenes</p>
+    <p xml:lang="et">Pildigalerii rakendus</p>
+    <p xml:lang="eu">Irudi-galeria aplikazio bat</p>
+    <p xml:lang="fi">Kuvagalleriasovellus</p>
+    <p xml:lang="fr">Une application de galerie d'images</p>
+    <p xml:lang="gl">Aplicación de galería de imaxes.</p>
+    <p xml:lang="he">יישום גלריית תמונות</p>
+    <p xml:lang="hi">एक छवि गैलरी अनुप्रयोग</p>
+    <p xml:lang="hu">Képgaléria alkalmazás</p>
+    <p xml:lang="ia">Un application de galeria de imagines</p>
+    <p xml:lang="id">Sebuah aplikasi galeri Citra</p>
+    <p xml:lang="it">Un'applicazione per gallerie di immagini</p>
+    <p xml:lang="ka">სურათების გალერეის აპლიკაცია</p>
+    <p xml:lang="ko">이미지 갤러리 앱</p>
+    <p xml:lang="lv">Attēls galerijā</p>
+    <p xml:lang="nl">Toepassing voor afbeeldingsgalerij</p>
+    <p xml:lang="nn">Eit biletgalleriprogram</p>
+    <p xml:lang="pa">ਚਿੱਤਰ ਗੈਲਰੀ ਐਪਲੀਕੇਸ਼ਨ</p>
+    <p xml:lang="pl">Aplikacja galerii obrazów</p>
+    <p xml:lang="pt">Uma aplicação de galeria de imagens</p>
+    <p xml:lang="pt-BR">Aplicativo de galeria de imagens</p>
+    <p xml:lang="ru">Приложение для работы с галереей изображений</p>
+    <p xml:lang="sa">एकः Image gallery अनुप्रयोगः</p>
+    <p xml:lang="sk">Aplikácia na galériu obrázkov</p>
+    <p xml:lang="sl">Program galerije slik</p>
+    <p xml:lang="sv">Ett bildgalleriprogram</p>
+    <p xml:lang="tr">Bir görsel galerisi uygulaması</p>
+    <p xml:lang="uk">Програма для роботи з галереями зображень</p>
+    <p xml:lang="zh-CN">一款图像库应用</p>
+    <p xml:lang="zh-TW">提供圖片庫功能的應用程式</p>
+  </description>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://cdn.kde.org/screenshots/koko/koko.png</image>
+    </screenshot>
+  </screenshots>
+  <recommends>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </recommends>
+  <content_rating type="oars-1.0"/>
+  <url type="homepage">https://apps.kde.org/koko</url>
+  <url type="bugtracker">https://invent.kde.org/graphics/koko/-/issues</url>
+  <url type="donation">https://kde.org/community/donations/?app=org.kde.koko</url>
+  <releases>
+    <release version="26.04.0" date="2026-04-16"/>
+    <release version="25.12.3" date="2026-03-05"/>
+    <release version="25.12.2" date="2026-02-05"/>
+    <release version="25.12.1" date="2026-01-08"/>
+    <release version="25.12.0" date="2025-12-11"/>
+    <release version="25.08.3" date="2025-11-06"/>
+    <release version="25.08.2" date="2025-10-09"/>
+    <release version="25.08.1" date="2025-09-11"/>
+    <release version="25.08.0" date="2025-08-14"/>
+    <release version="25.04.3" date="2025-07-03"/>
+    <release version="25.04.2" date="2025-06-05"/>
+    <release version="25.04.1" date="2025-05-08"/>
+    <release version="25.04.0" date="2025-04-17"/>
+    <release version="24.12.3" date="2025-03-06"/>
+    <release version="24.12.2" date="2025-02-06"/>
+    <release version="24.12.1" date="2025-01-09"/>
+    <release version="24.12.0" date="2024-12-12"/>
+    <release version="24.08.3" date="2024-11-07"/>
+    <release version="24.08.2" date="2024-10-10"/>
+    <release version="24.08.1" date="2024-09-12"/>
+    <release version="24.08.0" date="2024-08-22"/>
+    <release version="24.05.2" date="2024-07-04"/>
+    <release version="24.05.1" date="2024-06-13"/>
+    <release version="24.05.0" date="2024-05-23"/>
+    <release version="24.02.2" date="2024-04-11"/>
+    <release version="24.02.1" date="2024-03-21"/>
+    <release version="24.02.0" date="2024-02-28"/>
+    <release version="23.08.5" date="2024-02-15"/>
+    <release version="23.08.4" date="2023-12-07"/>
+    <release version="23.08.3" date="2023-11-09"/>
+    <release version="23.08.2" date="2023-10-12"/>
+    <release version="23.08.1" date="2023-09-14"/>
+    <release version="23.08.0" date="2023-08-24"/>
+    <release version="23.04.3" date="2023-07-06"/>
+    <release version="23.04.2" date="2023-06-08"/>
+    <release version="23.04.1" date="2023-05-11"/>
+    <release version="23.04.0" date="2023-04-20"/>
+    <release version="23.01" date="2023-01-30">
+      <url>https://plasma-mobile.org/2023/01/30/january-blog-post/</url>
+      <description>
+        <p>This release modernizes the settings page, updates the style of the album page and adds a confirmation dialog before discarding image edits. This also fixes the full screen and slideshow mode.</p>
+        <p xml:lang="ar">يُحدّث هذا الإصدار صفحة الإعدادات، ويُحدّث نمط صفحة الألبوم ويضيف حوار تأكيد قبل تجاهل تعديلات الصور. كما يُصلح وضع ملء الشاشة وعرض الشرائح.</p>
+        <p xml:lang="ca">Aquesta versió modernitza la pàgina de configuració, actualitza l'estil de la pàgina d'àlbum i afegeix un diàleg de confirmació abans de descartar les edicions d'imatges. També corregeix la pantalla completa i el mode de presentació de diapositives.</p>
+        <p xml:lang="ca-valencia">Esta versió modernitza la pàgina de configuració, actualitza l'estil de la pàgina d'àlbum i afig un diàleg de confirmació abans de descartar les edicions d'imatges. També corregix la pantalla completa i el mode de presentació de diapositives.</p>
+        <p xml:lang="cs">Tato verze modernizuje stránku nastavení, aktualizuje styl stránky alba a přidává potvrzovací dialogové okno před zrušením úprav obrázků. Opravuje také režim celé obrazovky a režim prezentace.</p>
+        <p xml:lang="de">Diese Version enthält eine modernisierte Einstellungsseite und das aktualisierte Design der Albumseite. Ein Bestätigungsdialog wurde hinzugefügt, der vor dem Verwerfen von Bildbearbeitungen erscheint. Außerdem wurden Fehler im Vollbild- und Diaschau-Modus behoben.</p>
+        <p xml:lang="es">Esta versión moderniza la página de configuración, actualiza el estilo de la página de álbumes y añade un diálogo de confirmación antes de descartar las ediciones de imágenes. También corrige los modos de pantalla completa y presentación de diapositivas.</p>
+        <p xml:lang="eu">Askapen honek ezarpenen orrialdea modernizatu, album-orrialdearen estiloa eguneratu eta irudietan editatutakoa baztertu aurretik baieztatzeko elkarrizketa-koadro bat gehitzen du. Pantaila oso eta diapositiba erakustaldi moduak ere zuzentzen ditu.</p>
+        <p xml:lang="fr">Cette version modernise la page de configuration, met à jour le style de la page d'album et ajoute une boîte de dialogue de confirmation avant de supprimer les modifications d'image. Elle corrige également le mode « Plein écran » et « Diaporama ».</p>
+        <p xml:lang="he">המהדורה הזאת מחדשת את עמוד ההגדרות, מעדכנת את סגנון עמוד האלבומים ומוסיפה חלונית אישור לפני סילוק עריכות תמונות. מתקנת גם את מצב המסך המלא והמצגת.</p>
+        <p xml:lang="ia">Iste version modernisa le pagina de preferentias, actualisa le stilo del pagina de album e adde un dialogo de confirmation ante annullar modificationes de imagine. Isto anque corrige le modo de schermo plen e de presentation a diapositiva. </p>
+        <p xml:lang="it">Questa versione modernizza la pagina delle impostazioni, aggiorna lo stile della pagina degli album, e aggiunge una finestra di conferma prima di eliminare le modifiche alle immagini. Inoltre, corregge la modalità a schermo intero e la modalità presentazione.</p>
+        <p xml:lang="ka">ეს გამოშვება მორგების გვერდს ათანამედროვებს, ალბომის გვერდის სტილს ანახლებს და სურათის ჩასწორებების გაუქმებამდე დადასტურების დიალოგს ამატებს; ასევე, გასწორდა სრულეკრანიანი და სლაიდშოუს რეჟიმები.</p>
+        <p xml:lang="nl">Deze uitgave moderniseert de instellingenpagina, vernieuwt de stijl van de albumpagina en voegt een bevestigingsvenster toe voordat bewerkte afbeeldingen worden verwijderd. Ook de problemen met de volledige schermmodus en de diavoorstelling zijn hiermee opgelost.</p>
+        <p xml:lang="pt-BR">Esta versão moderniza a página de configurações, atualiza o estilo da página do álbum e adiciona uma caixa de diálogo de confirmação antes de descartar as edições de imagem. Também corrige os modos de tela cheia e apresentação de slides.</p>
+        <p xml:lang="ru">В этом выпуске обновлена страница настроек, изменён стиль страницы альбома и добавлен диалог подтверждения перед отменой изменений изображения. Также исправлены полноэкранный режим и режим слайд-шоу.</p>
+        <p xml:lang="sk">This release modernizes nastavenia page, updates the style of the album page and adds a confirmation dialog before discarding image edits. This also fixes the full screen and slideshow mode.</p>
+        <p xml:lang="sl">Ta izdaja posodablja stran z nastavitvami, posodablja slog strani albuma in dodaja potrditveno pogovorno okno pred zavrženjem urejanja slik. Prav tako odpravlja celozaslonski način in način predsgtavitve.</p>
+        <p xml:lang="tr">Bu yayım, ayarlar sayfasını modernize ediyor, albüm sayfasının biçemini güncelliyor ve görsel düzenlemelerini silmeden önce bir onay iletişim kutusu ekliyor. Ayrıca tam ekran ve slayt gösterisi kipindeki sorunları da gideriyor.</p>
+        <p xml:lang="uk">У цьому випуску модернізовано сторінку налаштувань, оновлено стиль сторінки альбому та додано діалогове вікно підтвердження перед скасуванням редагувань зображень. Також виправлено повноекранний режим та режим показу слайдів.</p>
+      </description>
+    </release>
+    <release version="22.11" date="2022-11-30">
+      <url>https://plasma-mobile.org/2022/11/30/plasma-mobile-gear-22-11/</url>
+    </release>
+    <release version="22.09" date="2022-09-27">
+      <url>https://www.plasma-mobile.org/2022/09/27/plasma-mobile-gear-22-09/</url>
+    </release>
+    <release version="22.06" date="2022-06-24">
+      <url>https://www.plasma-mobile.org/2022/06/28/plasma-mobile-gear-22-06/</url>
+      <description>
+        <ul>
+          <li>Fixes related to window activation</li>
+          <li xml:lang="ar">إصلاحات متعلقة بتنشيط النافذة</li>
+          <li xml:lang="ca">Correccions relacionades amb l'activació de les finestres</li>
+          <li xml:lang="ca-valencia">Correccions relacionades amb l'activació de les finestres</li>
+          <li xml:lang="cs">Oprava problémů souvisejících s aktivací oken</li>
+          <li xml:lang="de">Fehlerbehebungen zur Fensteraktivierung</li>
+          <li xml:lang="es">Correcciones relacionadas con la activación de ventanas.</li>
+          <li xml:lang="eu">Leiho-aktibazioari lotutako zuzenketak</li>
+          <li xml:lang="fr">Correctifs liés à l'activation des fenêtres</li>
+          <li xml:lang="he">תיקונים שקשורים בהפעלת חלונות</li>
+          <li xml:lang="ia">Correctiones affin a activaction de fenestra</li>
+          <li xml:lang="it">Correzioni in merito all'attivazione della finestra</li>
+          <li xml:lang="ka">გასწორდა ფანჯრის აქტივაციასთან დაკავშირებული შეცდომები</li>
+          <li xml:lang="nl">Oplossingen met betrekking tot vensteractivering</li>
+          <li xml:lang="pt-BR">Correções relacionadas à ativação de janelas</li>
+          <li xml:lang="ru">Исправления, связанные с активацией окна</li>
+          <li xml:lang="sk">Fixes related to window activation</li>
+          <li xml:lang="sl">Popravki povezani z aktiviranjem oken</li>
+          <li xml:lang="tr">Pencere etkinleştirmeye yönelik düzeltmeler</li>
+          <li xml:lang="uk">Виправлення, які пов'язано із активацією вікон</li>
+          <li>Various code improvements and bugfixes</li>
+          <li xml:lang="ar">تحسينات متنوعة على الكود وإصلاح علل</li>
+          <li xml:lang="ca">Millores diverses del codi i esmenes d'errors</li>
+          <li xml:lang="ca-valencia">Millores diverses del codi i esmenes d'errors</li>
+          <li xml:lang="cs">Různá vylepšení kódu a opravy chyb</li>
+          <li xml:lang="de">Diverse Code-Verbesserungen und Fehlerbehebungen</li>
+          <li xml:lang="es">Varias mejoras de código y correcciones de errores.</li>
+          <li xml:lang="eu">Hainbat kode-hobekuntza eta akats-zuzenketa</li>
+          <li xml:lang="fr">Différentes améliorations du code et corrections de bogues</li>
+          <li xml:lang="he">מגוון שיפורי קוד ותיקוני תקלות</li>
+          <li xml:lang="ia">Varie perfectionamentos de codice e correctiones de faltas</li>
+          <li xml:lang="it">Vari miglioramenti al codice, e correzioni di bug</li>
+          <li xml:lang="ka">კოდის სხვადასხვა გაუმჯობესებები</li>
+          <li xml:lang="nl">Diverse codeverbeteringen en reparaties van fouten</li>
+          <li xml:lang="pt-BR">Diversas melhorias no código e correções de bugs</li>
+          <li xml:lang="ru">Различные улучшения кода и исправления ошибок</li>
+          <li xml:lang="sk">Various code improvements and bugfixes</li>
+          <li xml:lang="sl">Različne izboljšave kode in popravki napak</li>
+          <li xml:lang="tr">Çeşitli kod iyileştirmeleri ve hata düzeltmeleri</li>
+          <li xml:lang="uk">Різноманітні удосконалення програмного коду та виправлення помилок</li>
+        </ul>
+      </description>
+    </release>
+    <release version="22.04" date="2022-04-26">
+      <url>https://www.plasma-mobile.org/2022/04/26/plasma-mobile-gear-22-04/</url>
+    </release>
+    <release version="22.02" date="2022-02-09">
+      <url>https://www.plasma-mobile.org/2022/02/09/plasma-mobile-gear-22-02/</url>
+      <description>
+        <ul>
+          <li>Raise window on activation.</li>
+          <li xml:lang="ar">رفع النافذة عند التنشيط.</li>
+          <li xml:lang="ca">Puja la finestra a l'activació.</li>
+          <li xml:lang="ca-valencia">Puja la finestra a l'activació.</li>
+          <li xml:lang="cs">Otevření okna při aktivaci.</li>
+          <li xml:lang="de">Fenster bei Aktivierung nach vorn holen.</li>
+          <li xml:lang="es">Pasar ventana al frente al activar.</li>
+          <li xml:lang="eu">Aktibatzean leihoa gaineratzea.</li>
+          <li xml:lang="fr">Faire apparaitre la fenêtre à l’activation.</li>
+          <li xml:lang="he">הגבהת החלון בעת ההפעלה.</li>
+          <li xml:lang="ia">Eleva fenestra sur activation.</li>
+          <li xml:lang="it">Alza la finestra all'attivazione.</li>
+          <li xml:lang="ka">ფანჯრის ამოწევა აქტივაციისას.</li>
+          <li xml:lang="nl">Verhoog het venster bij activering.</li>
+          <li xml:lang="pt-BR">Elevar a janela ao ativar.</li>
+          <li xml:lang="ru">Поднятие окна при активации.</li>
+          <li xml:lang="sk">Raise window on activation.</li>
+          <li xml:lang="sl">Dvigni okno ob aktivaciji.</li>
+          <li xml:lang="tr">Etkinleştirildiğinde pencereyi öne getir</li>
+          <li xml:lang="uk">Реалізовано підняття вікна при активації.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="21.12" date="2021-12-07">
+      <url>https://www.plasma-mobile.org/2021/12/07/plasma-mobile-gear-21-12/</url>
+      <description>
+        <ul>
+          <li>User interface improvements.</li>
+          <li xml:lang="ar">تحسينات واجهة المستخدم.</li>
+          <li xml:lang="ca">Millores en la interfície d'usuari.</li>
+          <li xml:lang="ca-valencia">Millores en la interfície d'usuari.</li>
+          <li xml:lang="cs">Vylepšení uživatelského rozhraní.</li>
+          <li xml:lang="de">Verbesserungen der Benutzeroberfläche.</li>
+          <li xml:lang="es">Mejoras de la interfaz de usuario.</li>
+          <li xml:lang="eu">Erabiltzaile-interfazearen hobekuntzak.</li>
+          <li xml:lang="fr">Améliorations de l'interface utilisateur.</li>
+          <li xml:lang="he">שיפורי ממשק משתמש.</li>
+          <li xml:lang="ia">Perfectionamentos de interfacie de usator. </li>
+          <li xml:lang="it">Miglioramenti all'interfaccia utente.</li>
+          <li xml:lang="ka">მომხმარებლის ინტერფეისის ზოგადი გაუმჯობესება.</li>
+          <li xml:lang="nl">Verbeteringen aan het gebruikersinterface.</li>
+          <li xml:lang="pt-BR">Melhorias na interface do usuário.</li>
+          <li xml:lang="ru">Улучшения пользовательского интерфейса.</li>
+          <li xml:lang="sk">User interface improvements.</li>
+          <li xml:lang="sl">Izboljšave uporabniškega vmesnika.</li>
+          <li xml:lang="tr">Kullanıcı arayüzü iyileştirmeleri</li>
+          <li xml:lang="uk">Поліпшення у інтерфейсі користувача.</li>
+          <li>Image resizing and cropping support improvements.</li>
+          <li xml:lang="ar">تحسينات دعم تغيير حجم الصور وقصها.</li>
+          <li xml:lang="ca">Millores en la implementació del canvi de mida i l'escapçat d'imatges.</li>
+          <li xml:lang="ca-valencia">Millores en la implementació del canvi de mida i l'escapçat d'imatges.</li>
+          <li xml:lang="cs">Vylepšení podpory změny velikosti a ořezávání obrázků.</li>
+          <li xml:lang="de">Verbesserung der Unterstützung von Größenänderungen und dem Zuschneiden von Bildern.</li>
+          <li xml:lang="es">Mejoras en la compatibilidad con recorte y cambio de tamaño de imágenes.</li>
+          <li xml:lang="eu">Irudien neurria aldatzeko eta mozteko euskarri hobetua.</li>
+          <li xml:lang="fr">Améliorations de la prise en charge du redimensionnement et du recadrage des images.</li>
+          <li xml:lang="he">שיפורים בתמיכה בשינוי גודל תמונות וחיתוך.</li>
+          <li xml:lang="ia">Perfectionamentos de supporto de redimensionar e taliar imagines.</li>
+          <li xml:lang="it">Miglioramenti al ridimensionamento delle immagini e al supporto al ritaglio.</li>
+          <li xml:lang="ka">გაუმჯობესდა გამოსახულების ზომის შეცვლისა და ამოჭრის მხარდაჭერა.</li>
+          <li xml:lang="nl">Ondersteuning voor het vergroten/verkleinen en bijsnijden van afbeeldingen is verbeterd.</li>
+          <li xml:lang="pt-BR">Melhorias no suporte para redimensionamento e recorte de imagens.</li>
+          <li xml:lang="ru">Улучшена поддержка изменения размера и обрезки изображений.</li>
+          <li xml:lang="sk">Image resizing and cropping support improvements.</li>
+          <li xml:lang="sl">Izboljšave podpore za spreminjanje velikosti in obrezovanje slik.</li>
+          <li xml:lang="tr">Görsel yeniden boyutlandırma ve kırpma desteği iyileştirmeleri</li>
+          <li xml:lang="uk">Удосконалення підтримки зміни розмірів та обрізання зображень.</li>
+          <li>Improvements for SVG rendering</li>
+          <li xml:lang="ar">تحسينات لتصيير SVG</li>
+          <li xml:lang="ca">Millores a la renderització de SVG</li>
+          <li xml:lang="ca-valencia">Millores a la renderització de SVG</li>
+          <li xml:lang="cs">Vylepšení pro vykreslování SVG</li>
+          <li xml:lang="de">Verbesserungen bei der SVG-Darstellung</li>
+          <li xml:lang="es">Mejoras en la representación SVG.</li>
+          <li xml:lang="eu">SVG errendatzeko hobekuntzak</li>
+          <li xml:lang="fr">Améliorations pour le rendu du format « SVG »</li>
+          <li xml:lang="he">שיפורים בעיבוד SVG</li>
+          <li xml:lang="ia">Perfectionamentos per rendition SVG</li>
+          <li xml:lang="it">Miglioramenti al rendering SVG</li>
+          <li xml:lang="ka">გაუმჯობესდა SVG-ის რენდერი</li>
+          <li xml:lang="nl">Verbeteringen voor SVG-weergave</li>
+          <li xml:lang="pt-BR">Melhorias na renderização de SVG</li>
+          <li xml:lang="ru">Улучшения отрисовки SVG</li>
+          <li xml:lang="sk">Improvements for SVG rendering</li>
+          <li xml:lang="sl">Izboljšave upodabljanja SVG</li>
+          <li xml:lang="tr">SVG sunumu iyileştirmeleri</li>
+          <li xml:lang="uk">Удосконалення обробки SVG</li>
+          <li>Support for color correction on X11</li>
+          <li xml:lang="ar">دعم تصحيح الألوان على X11</li>
+          <li xml:lang="ca">Implementació de la correcció de color a X11</li>
+          <li xml:lang="ca-valencia">Implementació de la correcció de color a X11</li>
+          <li xml:lang="cs">Podpora korekce barev na X11</li>
+          <li xml:lang="de">Unterstützung für Farbkorrektur unter X11</li>
+          <li xml:lang="es">Compatibilidad con corrección de color en X11.</li>
+          <li xml:lang="eu">X11-n koloreen zuzenketarako euskarria</li>
+          <li xml:lang="fr">Prise en charge de la correction des couleurs sous X11</li>
+          <li xml:lang="he">תמיכה בתיקון צבע ב־X11</li>
+          <li xml:lang="ia">Supporto per correctiones de color sur X11</li>
+          <li xml:lang="it">Supporto alla correzione dei colori in X11</li>
+          <li xml:lang="ka">ფერების კორექციის მხარდაჭერა X11-ზე</li>
+          <li xml:lang="nl">Ondersteuning voor kleurcorrectie op X11</li>
+          <li xml:lang="pt-BR">Suporte para correção de cor no X11</li>
+          <li xml:lang="ru">Поддержка коррекции цвета в X11</li>
+          <li xml:lang="sk">Support for color correction on X11</li>
+          <li xml:lang="sl">Podpora za korekcijo barv na X11</li>
+          <li xml:lang="tr">X11 üzerinde renk düzeltme desteği</li>
+          <li xml:lang="uk">Підтримка виправлення кольорів у X11</li>
+        </ul>
+      </description>
+    </release>
+    <release version="21.08" date="2021-08-31">
+      <url>https://www.plasma-mobile.org/2021/08/31/plasma-mobile-gear-21-08/</url>
+    </release>
+    <release version="21.07" date="2021-07-20">
+      <url>https://www.plasma-mobile.org/2021/07/20/plasma-mobile-gear-21-07/</url>
+    </release>
+    <release version="21.06" date="2021-06-10">
+      <description>
+        <p>This release contains only a small bugfix and updated translations.</p>
+        <p xml:lang="ar">يحتوي هذا الإصدار على إصلاح علة صغير وتحديث للترجمات فقط.</p>
+        <p xml:lang="ca">Aquest llançament només conté una correcció d'error petita i traduccions actualitzades.</p>
+        <p xml:lang="ca-valencia">Este llançament només conté una esmena d'errors xicoteta i traduccions actualitzades.</p>
+        <p xml:lang="cs">Tato verze obsahuje pouze drobnou opravu chyby a aktualizované překlady.</p>
+        <p xml:lang="de">Diese Veröffentlichung enthält eine kleine Fehlerbehebung und aktualisierte Übersetzungen.</p>
+        <p xml:lang="es">Esta versión contiene solo una pequeña corrección de errores y traducciones actualizadas.</p>
+        <p xml:lang="eu">Askapen honek akats konponketa bakarra eta itzulpen eguneratuak ditu.</p>
+        <p xml:lang="fr">Cette version contient seulement une petite correction de bogues et des mises à jour de traductions .</p>
+        <p xml:lang="he">המהדורה הזאת מכילה תיקוני תקלות קטנים ותרגומים עדכניים.</p>
+        <p xml:lang="ia">Iste version contine solmente un parve correction de falta e traductiones actualisate.</p>
+        <p xml:lang="it">Questa versione contiene solo una piccola correzione di bug e aggiornamenti alle traduzioni.</p>
+        <p xml:lang="ka">ეს ვერსია შეიცავს, მხოლოდ, პატარა შეცდომების გასწორებას და განახლებულ თარგმანებს.</p>
+        <p xml:lang="nl">Deze uitgave bevat slechts een kleine reparaties van fouten en bijgewerkte vertalingen.</p>
+        <p xml:lang="pt-BR">Esta versão contém apenas uma pequena correção de bug e traduções atualizadas.</p>
+        <p xml:lang="ru">В этом выпуске исправлена небольшая ошибка и обновлены переводы.</p>
+        <p xml:lang="sk">This release contains only a small bugfix and updated translations.</p>
+        <p xml:lang="sl">Ta izdaja vsebuje le manjši popravek napak in posodobljene prevode.</p>
+        <p xml:lang="tr">Bu yayım, yalnızca hata düzeltmeleri ve güncellenmiş çeviriler ekler.</p>
+        <p xml:lang="uk">У цьому випуску маємо лише невеличкі виправлення вад та оновлено переклади.</p>
+      </description>
+      <url>https://www.plasma-mobile.org/2021/06/10/plasma-mobile-update-june/</url>
+    </release>
+    <release version="21.05" date="2021-05-10">
+      <url>https://www.plasma-mobile.org/2021/05/10/plasma-mobile-gear-may-2021/</url>
+      <description>
+        <p>Initial release of Koko, an convergent image viewer for Plasma Mobile and desktop</p>
+        <p xml:lang="ar">الإصدار الأولي لـ كوكو، عارض صور متقارب لبلازما الجوال وسطح المكتب</p>
+        <p xml:lang="ca">Versió inicial del Koko, un visualitzador d'imatges convergent per al Plasma Mobile i l'escriptori</p>
+        <p xml:lang="ca-valencia">Versió inicial de Koko, un visor d'imatges convergent per a Plasma Mobile i l'escriptori</p>
+        <p xml:lang="cs">První vydání Koko, konvergentního prohlížeče obrázků pro Plasma Mobile a stolní počítače</p>
+        <p xml:lang="de">Erste Veröffentlichung von Koko, einem konvergenten Bildbetrachter für Plasma Mobile und Arbeitsplatzrechner</p>
+        <p xml:lang="es">Versión inicial de Koko, un visor de imágenes convergente para Plasma Mobile y equipos de escritorio.</p>
+        <p xml:lang="eu">Kokoren hasierako askapena, Plasma Mugikorrerako eta Mahaigainerako irudi-erakusle konbergente bat</p>
+        <p xml:lang="fr">Première version de Koko, un afficheur d'images de convergence pour les versions mobile et de bureau de Plasma</p>
+        <p xml:lang="he">המהדורה הראשונית של Koko, מציג תמונות גמיש לפלזמה לניידים ולשולחן העבודה</p>
+        <p xml:lang="ia">Version initial de Koko,un visor de imagine convergente per Plasma Mobile e scriptorio</p>
+        <p xml:lang="it">Versione iniziale di Koko, un semplice visualizzatore di immagini per Plasma Mobile e desktop</p>
+        <p xml:lang="ka">Koko-ის, Plasma Mobile და Plasma Desktop-ის გამოსახულებების დამთვალიერებლის პირველი ვერსია</p>
+        <p xml:lang="nl">Eerste uitgave van Koko, een convergente afbeeldingsviewer voor Plasma Mobile en bureaublad</p>
+        <p xml:lang="pt-BR">Lançamento inicial do Koko, um visualizador de imagens convergente para Plasma Mobile e desktop</p>
+        <p xml:lang="ru">Представлен первый выпуск Koko — универсального просмотрщика изображений для Plasma Mobile и настольных систем</p>
+        <p xml:lang="sk">Initial release of Koko, an convergent image viewer for Plasma Mobile and desktop</p>
+        <p xml:lang="sl">Začetna izdaja Koka, konvergentnega pregledovalnika slik za Plasma Mobile in namizje</p>
+        <p xml:lang="tr">Koko’nun, Plasma Cep ve masaüstü için geliştirilmiş, yakınsak görüntüleyici uygulamasının ilk sürümü yayımlandı.</p>
+        <p xml:lang="uk">Початковий випуск Koko, універсального засобу перегляду для Plasma Mobile та стільниці</p>
+      </description>
+    </release>
+  </releases>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <project_group>KDE</project_group>
+  <provides>
+    <binary>koko</binary>
+  </provides>
+  <launchable type="desktop-id">org.kde.koko.desktop</launchable>
+</component>

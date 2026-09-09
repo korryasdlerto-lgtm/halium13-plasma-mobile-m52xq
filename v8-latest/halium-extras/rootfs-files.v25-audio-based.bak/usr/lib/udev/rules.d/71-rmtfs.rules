@@ -1,1 +1,0 @@
-KERNEL=="uio*", ATTR{name}=="rmtfs", SYMLINK+="qcom_rmtfs_uio1", TAG+="systemd", ENV{SYSTEMD_WANTS}="rmtfs.service"

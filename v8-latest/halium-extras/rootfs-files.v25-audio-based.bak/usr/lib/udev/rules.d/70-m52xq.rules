@@ -1,5 +1,0 @@
-ACTION=="add", KERNEL=="kgsl-3d0", GROUP="video", MODE="0666"
-ACTION=="add", KERNEL=="ion", GROUP="video", MODE="0666"
-ACTION=="add", KERNEL=="video*", GROUP="video", MODE="0660"
-ACTION=="add", KERNEL=="card0", GROUP="video", MODE="0660"
-ACTION=="add", KERNEL=="renderD*", GROUP="video", MODE="0660"

@@ -1,0 +1,19 @@
+[Desktop Entry]
+# в16, НАЙДЕНО+ПОДТВЕРЖДЕНО ЖИВЬЁМ 2026-09-08 (перенесено в эту
+# в14-базированную сборку как в20): та же причина, что у
+# extremetuxracer (см. net.sourceforge.extremetuxracer.desktop в этой
+# же папке) -- SDL2-сборка supertuxkart падает с "Failed to open X11
+# display" при запуске из-под лаунчера (только WAYLAND_DISPLAY, без
+# DISPLAY). Явный DISPLAY=:0 (Xwayland, xwayland=true в wayfire.ini)
+# чинит запуск -- живьём подтверждено.
+Name=SuperTuxKart
+Icon=supertuxkart
+StartupWMClass=supertuxkart
+GenericName=A 3D open-source kart racing game
+Exec=env DISPLAY=:0 supertuxkart
+Terminal=false
+StartupNotify=false
+Type=Application
+Categories=Game;ArcadeGame;
+Keywords=tux;game;race;
+PrefersNonDefaultGPU=true

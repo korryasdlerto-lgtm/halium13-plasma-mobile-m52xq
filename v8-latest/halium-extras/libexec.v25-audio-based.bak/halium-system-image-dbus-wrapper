@@ -1,3 +1,0 @@
-#!/bin/sh
-export HYBRIS_LD_LIBRARY_PATH=/opt/halium-lxc-bridge/system-lib64:/opt/halium-lxc-bridge/vendor-lib64
-exec /usr/sbin/system-image-dbus "$@"

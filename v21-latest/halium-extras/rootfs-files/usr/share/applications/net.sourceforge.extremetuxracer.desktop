@@ -1,0 +1,25 @@
+[Desktop Entry]
+# в16, НАЙДЕНО+ПОДТВЕРЖДЕНО ЖИВЬЁМ 2026-09-08 (перенесено в эту
+# в14-базированную сборку как в20): SDL2-сборка etr не умеет в
+# Wayland-нативный бэкенд, при запуске с иконки (только
+# WAYLAND_DISPLAY в окружении лаунчера) падает с "Failed to open X11
+# display". Wayfire поднимает Xwayland (xwayland=true в wayfire.ini),
+# явный DISPLAY=:0 в Exec= чинит запуск полностью -- живьём
+# подтверждено.
+Version=1.0
+Type=Application
+Name=Extreme Tux Racer
+GenericName=Arcade Game
+GenericName[de]=Arkade-Spiel
+GenericName[ro_RO]=Joc de arcadă
+Comment=Race a penguin down a mountain
+Comment[de]=Rutsche mit einem Pinguin einen Hügel hinab
+Comment[ro_RO]=Curse cu un pinguin pe munte, la vale
+Icon=etr
+
+Exec=env DISPLAY=:0 etr
+Terminal=false
+StartupNotify=false
+
+Categories=Game;ArcadeGame;
+Keywords=game;tux;3D;pinguin;race;arcade;

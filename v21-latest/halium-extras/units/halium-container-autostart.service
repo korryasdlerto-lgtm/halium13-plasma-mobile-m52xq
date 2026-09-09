@@ -1,0 +1,6 @@
+[Unit]
+Description=Automatic Android container start (45s after boot, 55s on the very first boot)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/halium-container-autostart.sh

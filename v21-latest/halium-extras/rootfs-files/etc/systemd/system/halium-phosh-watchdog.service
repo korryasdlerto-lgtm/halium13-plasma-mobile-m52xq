@@ -1,0 +1,7 @@
+[Unit]
+Description=Restart phosh.service if phoc is stuck alive with no shell client
+After=phosh.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/halium-phosh-watchdog.sh
